@@ -158,7 +158,7 @@ function burst(x,y){const mainStart=particles.length;const v=current, sh=v.shape
 const flicker=end==='点滅'; // 先点滅は末端のみ点滅（下の p.ending 判定）
 // 開花直後の一瞬の閃光。星の種類を変えずに「玉が割れた」瞬間を強調する。
 // 菊は星の筋そのものを見せる。中心に大きな白い閃光を重ねない。
-if(sh!=='kiku')bloomFlashes.push({x,y,color:clr,age:0,life:sh==='thunder'?.62:sh==='palm'?.32:.47,ring:sh!=='fly'&&sh!=='bee'&&sh!=='butterfly'&&sh!=='palm'&&sh!=='crown'&&sh!=='senrin',strength:sh==='thunder'?1.35:sh==='botan'?.68:sh==='senrin'?.16:1});
+if(sh!=='kiku')bloomFlashes.push({x,y,color:clr,age:0,life:sh==='thunder'?.62:sh==='palm'?.32:.47,ring:sh!=='fly'&&sh!=='bee'&&sh!=='butterfly'&&sh!=='palm'&&sh!=='crown'&&sh!=='senrin',strength:sh==='thunder'?1.35:['botan','heart','butterfly','saturn'].includes(sh)?.68:sh==='senrin'?.16:1});
 let count=sh==='kiku'?230:sh==='botan'?210:sh==='crown'?195:sh==='senrin'?0:132;
 const splitCols=(v.mode==='染分' && seq.length>=2)?[seq[0],seq[1]]:null;
 const opts={life:3.95,trail:sh==='kiku'?1.0:sh==='botan'?.2:sh==='crown'?1.95:.5,seq:splitCols?[]:seq,seqMode:v.mode,grav:sh==='crown'?36:sh==='willow'?44:sh==='botan'?6.5:14,flicker,size:sh==='botan'?5.4:4.7};
@@ -259,13 +259,13 @@ else if(sh==='palm'){
 }
 else if(sh==='butterfly'){
  // 左右対称の上翅と下翅を別々の輪郭として描く。
- // 飛び散るだけの曲線では形が読めないため、羽のアウトラインを高密度の星で固定する。
+ // 飛び散るだけの曲線では形が読めないため、羽のアウトラインを間隔のある星で描く。
  const butterflyScale=Math.min(1.13,Math.max(.50,Math.min(W/620,H/460)));
  const emit=(px,py,c=clr,sz=3.9)=>{
    const dx=px*butterflyScale,dy=py*butterflyScale;
    particles.push({x:x+dx*.12,y:y+dy*.12,vx:dx*.68,vy:dy*.68,
      color:c,life:4.5,ttl:4.5,trail:0,drag:.982,grav:0,seq:[],
-     flicker:false,kind:'butterfly-outline',size:sz,delay:0});
+     flicker:false,kind:'butterfly-outline',size:sz,delay:0,botanRadius:rand(1.00,1.45),botanGlow:rand(.75,1.10)});
  };
  const bez=(a,b,c,d,u)=>{const v=1-u;return v*v*v*a+3*v*v*u*b+3*v*u*u*c+u*u*u*d};
  const wings=[
@@ -276,38 +276,47 @@ else if(sh==='butterfly'){
  ];
  for(const side of [-1,1]){
    wings.forEach((pts,segment)=>{
-     for(let j=0;j<78;j++){
-       const u=j/77;
+     for(let j=0;j<19;j++){
+       const u=j/18;
        const px=bez(pts[0][0],pts[1][0],pts[2][0],pts[3][0],u)*-side;
        const py=bez(pts[0][1],pts[1][1],pts[2][1],pts[3][1],u);
        emit(px,py,clr,segment<2?4.1:3.7);
      }
    });
    // 羽脈を少量入れ、蝶だと認識しやすいようにする。
-   for(let j=0;j<42;j++){
-     const u=j/41;
+   for(let j=0;j<9;j++){
+     const u=j/8;
      emit((-side)*(12+85*u),-10-67*u,clr,2.4);
      emit((-side)*(10+55*u), 12+62*u,clr,2.4);
    }
  }
- for(let j=0;j<38;j++)emit(Math.sin(j*.7)*2,-36+j*2.35,clr,4.1);
- for(let j=0;j<20;j++){
-   let u=j/19;
+ for(let j=0;j<12;j++)emit(Math.sin(j*1.3)*2,-36+j*8.0,clr,4.1);
+ for(let j=0;j<7;j++){
+   let u=j/6;
    emit(-u*27,-35-u*31,clr,2.8);
    emit(u*27,-35-u*31,clr,2.8);
  }
 }
-else if(sh==='heart'){for(let i=0;i<220;i++){const a=i*Math.PI*2/220,px=16*Math.pow(Math.sin(a),3)/17,py=-(13*Math.cos(a)-5*Math.cos(2*a)-2*Math.cos(3*a)-Math.cos(4*a))/17;particle(x,y,px*145,py*145,clr,2.8,{trail:.08,grav:1,size:4.2})}}
+else if(sh==='heart'){
+ // 輪郭を構成する星を、牡丹と同じ丸い発光点で見せる。
+ for(let i=0;i<66;i++){
+   const a=i*Math.PI*2/66,px=16*Math.pow(Math.sin(a),3)/17,py=-(13*Math.cos(a)-5*Math.cos(2*a)-2*Math.cos(3*a)-Math.cos(4*a))/17;
+   particle(x,y,px*145,py*145,clr,3.35,{kind:'shape-star',trail:0,grav:3.5,drag:.987,size:4.2});
+   const star=particles[particles.length-1];star.botanRadius=rand(.98,1.52);star.botanGlow=rand(.7,1.1);
+ }
+}
 else if(sh==='saturn'){
  // Project a sphere of stars inside a wider, tilted equatorial ring.
  const tilt=-.20,cos=Math.cos(tilt),sin=Math.sin(tilt);
- for(let i=0;i<240;i++){
-   const z=1-2*(i+.5)/240,a=i*2.3999632297,r=Math.sqrt(1-z*z);
-   particle(x,y,Math.cos(a)*r*86,z*86,clr,3.8,{trail:.04,grav:1,drag:.988,size:4.0,kind:'saturn-sphere'});
+ for(let i=0;i<112;i++){
+   const z=1-2*(i+.5)/112,a=i*2.3999632297,r=Math.sqrt(1-z*z);
+   particle(x,y,Math.cos(a)*r*86,z*86,clr,3.8,{trail:.04,grav:1,drag:.988,size:4.0,kind:'shape-star'});
+   const star=particles[particles.length-1];star.botanRadius=rand(.92,1.50);star.botanGlow=rand(.70,1.1);
  }
- for(let i=0;i<220;i++){
-   const a=i*Math.PI*2/220,px=Math.cos(a)*174,py=Math.sin(a)*49;
-   particle(x,y,px*cos-py*sin,px*sin+py*cos,clr,3.8,{trail:.06,grav:1,drag:.988,size:4.2,kind:'saturn-ring'});
+ for(let i=0;i<76;i++){
+   const a=i*Math.PI*2/76,px=Math.cos(a)*174,py=Math.sin(a)*49;
+   particle(x,y,px*cos-py*sin,px*sin+py*cos,clr,3.8,{trail:.06,grav:1,drag:.988,size:4.2,kind:'shape-star'});
+   const star=particles[particles.length-1];star.botanRadius=rand(1.02,1.58);star.botanGlow=rand(.75,1.12);
  }
 }
 else if(sh==='cluster'){
@@ -364,12 +373,12 @@ else {
 
 // 菊・牡丹・冠菊の開花時だけ、親星と同色の短命な火花を少量追加。
 // 形状を変えないため、型物・千輪・飛遊星などには加えない。
-if(['botan','crown'].includes(sh)){
- const accents=sh==='botan'?24:36;
+if(['botan','crown','heart','butterfly','saturn'].includes(sh)){
+ const accents=sh==='botan'?24:sh==='crown'?36:18;
  for(let i=0;i<accents;i++){
   const a=i*2.3999632297+rand(-.16,.16),sp=rand(48,112);
   particle(x,y,Math.cos(a)*sp,Math.sin(a)*sp,splitCols?(Math.cos(a)<0?splitCols[0]:splitCols[1]):clr,rand(.48,.78),
-   {kind:'bloom-glint',size:2.1,trail:sh==='botan'?0:.3,grav:4,drag:.982});
+   {kind:'bloom-glint',size:2.1,trail:sh==='crown'?.3:0,grav:4,drag:.982});
  }
 }
 const mainStars=particles.slice(mainStart);
@@ -733,7 +742,7 @@ function drawAscentEffects(x,targetY,as,time,dt){
  }
  if(as.includes('点滅'))drawGlowDot(x,yy,color,3.1,.30*Math.max(0,Math.sin(time*24)));
 }
-function render(now){let dt=Math.min((now-lastTime)/1000,.045)*(Number($('speed').value)/100);lastTime=now;ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';if(active&&current.originalType!=='糸柳'&&!['kiku','botan','fly','cluster','senrin','palm','crown'].includes(current.shape)){ctx.globalCompositeOperation='destination-out';ctx.fillStyle='rgba(0,0,0,.10)';ctx.fillRect(0,0,W,H);ctx.globalCompositeOperation='source-over'}else{clearSky()}ctx.globalAlpha=1;
+function render(now){let dt=Math.min((now-lastTime)/1000,.045)*(Number($('speed').value)/100);lastTime=now;ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';if(active&&current.originalType!=='糸柳'&&!['kiku','botan','heart','butterfly','saturn','fly','cluster','senrin','palm','crown'].includes(current.shape)){ctx.globalCompositeOperation='destination-out';ctx.fillStyle='rgba(0,0,0,.10)';ctx.fillRect(0,0,W,H);ctx.globalCompositeOperation='source-over'}else{clearSky()}ctx.globalAlpha=1;
 if(active){t+=dt;updateWhistle();if(current.ending==='群声'&&!groupRoarPlayed&&t>=BURST_AUDIO_OFFSET+2.6){groupRoarPlayed=true;groupRoarSound()}const x=W*.5,y=H*.42;
  if(t<BURST_AUDIO_OFFSET){
   drawAscentEffects(x,y,current.ascent,t,dt);
@@ -958,9 +967,17 @@ if(active){t+=dt;updateWhistle();if(current.ending==='群声'&&!groupRoarPlayed&
    if(p.path.length>1){
      const first=p.path[0],gradient=ctx.createLinearGradient(first.x,first.y,p.x,p.y);
      gradient.addColorStop(0,co+'00');gradient.addColorStop(.5,co+'80');gradient.addColorStop(1,co);
-     ctx.globalAlpha=alpha*.85;ctx.strokeStyle=gradient;ctx.lineWidth=p.kind==='cluster-bundle'?.75:.85;ctx.beginPath();ctx.moveTo(first.x,first.y);for(const point of p.path.slice(1))ctx.lineTo(point.x,point.y);ctx.stroke();
+     ctx.globalAlpha=alpha*(p.kind==='fly'?1:.85);ctx.strokeStyle=gradient;ctx.lineWidth=p.kind==='cluster-bundle'?.75:1.35;ctx.beginPath();ctx.moveTo(first.x,first.y);for(const point of p.path.slice(1))ctx.lineTo(point.x,point.y);ctx.stroke();
    }
-   ctx.globalAlpha=alpha;ctx.fillStyle=co===cColor('炭')?'#ffb368':co;ctx.beginPath();ctx.arc(p.x,p.y,.95,0,Math.PI*2);ctx.fill();continue;
+   ctx.fillStyle=co===cColor('炭')?'#ffb368':co;
+   if(p.kind==='fly'){
+     // 蜂に比べて薄かった飛遊星の光点を強調。広がるフラッシュは足さない。
+     ctx.globalAlpha=alpha*.20;ctx.beginPath();ctx.arc(p.x,p.y,3.2,0,Math.PI*2);ctx.fill();
+     ctx.globalAlpha=alpha;ctx.beginPath();ctx.arc(p.x,p.y,1.5,0,Math.PI*2);ctx.fill();
+   }else{
+     ctx.globalAlpha=alpha;ctx.beginPath();ctx.arc(p.x,p.y,.95,0,Math.PI*2);ctx.fill();
+   }
+   continue;
  }
  if(p.kind==='senrin-shell')continue;
  if(p.kind==='cluster-white'){
@@ -1021,7 +1038,7 @@ if(active){t+=dt;updateWhistle();if(current.ending==='群声'&&!groupRoarPlayed&
  }
  // 牡丹：星一粒ずつが球状に広がり、軌跡を残さず独立して消える。
  // 菊も同じ丸い星を描く。違いは上で描いた尾だけ。
- if(p.kind==='botan-star'||p.kind==='kiku-star'||(current.shape==='botan'&&p.kind==='regular')){
+ if(p.kind==='botan-star'||p.kind==='kiku-star'||p.kind==='shape-star'||p.kind==='butterfly-outline'||(current.shape==='botan'&&p.kind==='regular')){
    const radius=(p.botanRadius||1.18)*Math.min(1.15,Math.max(.68,W/690));
    const glow=p.botanGlow||.9;
    // 白い芯を描かず、親星の色（染分や先変化を含む）をそのまま見せる。
