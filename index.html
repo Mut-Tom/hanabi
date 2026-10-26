@@ -1,5 +1,22 @@
 <!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#080f1e"><meta name="description" content="玉名をつくり、夜空へ打ち上げる。日本の花火を設計して楽しむ、花火工房。"><title>花火工房｜玉名シミュレーター</title>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="花火工房">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:title" content="花火工房｜玉名シミュレーター">
+<meta property="og:description" content="玉名をつくり、夜空へ打ち上げる。日本の花火を設計して楽しむ、花火工房。">
+<meta property="og:url" content="https://mut-tom.github.io/hanabi/">
+<meta property="og:image" content="https://mut-tom.github.io/hanabi/og-image.png">
+<meta property="og:image:secure_url" content="https://mut-tom.github.io/hanabi/og-image.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="夜空に大きく開く金色の花火。花火工房の共有用サムネイル">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="花火工房｜玉名シミュレーター">
+<meta name="twitter:description" content="玉名をつくり、夜空へ打ち上げる。日本の花火を設計して楽しむ、花火工房。">
+<meta name="twitter:image" content="https://mut-tom.github.io/hanabi/og-image.png">
+<link rel="canonical" href="https://mut-tom.github.io/hanabi/">
 <style>
 :root{color-scheme:dark;--bg:#080f1e;--panel:#101b2c;--panel2:#132036;--line:#2a3951;--ink:#f7f2e8;--muted:#a8b6c9;--gold:#e4c28a;--gold2:#f7dca9;--focus:#ffd58b;--shadow:0 18px 65px #02081275}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:var(--ink);font:14px/1.7 system-ui,-apple-system,'Hiragino Kaku Gothic ProN','Noto Sans JP',Meiryo,sans-serif;background:radial-gradient(ellipse 65% 32% at 51% -12%,#243753 0%,transparent 85%),linear-gradient(160deg,#0b1424 0%,#070d19 65%,#0c1524 100%);min-height:100vh}
@@ -19,7 +36,7 @@ button,input,select{font:inherit}button{cursor:pointer}button:disabled{cursor:no
 @media(max-width:360px){.fieldgrid{grid-template-columns:1fr}.field label{min-height:0}.brand-mark{display:none}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto;transition:none!important}}
 </style></head><body>
-<div class="shell"><header class="site-header"><div class="brand"><div class="brand-mark" aria-hidden="true">✺</div><div><div class="brand-kicker">HANABI WORKSHOP · JAPAN</div><h1>花火工房 <span class="version">v1.0.0</span></h1></div></div><div class="header-right"><span class="header-note">玉名をつくり、夜空へ打ち上げる。</span><button class="icon-button" id="settings" aria-haspopup="dialog">⚙ 音の設定</button></div></header>
+<div class="shell"><header class="site-header"><div class="brand"><div class="brand-mark" aria-hidden="true">✺</div><div><div class="brand-kicker">HANABI WORKSHOP · JAPAN</div><h1>花火工房 <span class="version">v1.0.1</span></h1></div></div><div class="header-right"><span class="header-note">玉名をつくり、夜空へ打ち上げる。</span><button class="icon-button" id="settings" aria-haspopup="dialog">⚙ 音の設定</button></div></header>
 <main class="layout"><div class="left-column">
 <section aria-label="打ち上げの夜空"><div class="section-label"><span>01 / FIREWORKS STAGE</span><span class="sub">花火を打ち上げる</span></div><div class="stage-frame"><div class="screen"><canvas id="sky" aria-label="花火シミュレーションの夜空"></canvas><div class="stage-top"><div id="status"><span class="live-dot"></span>READY — 夜空の準備ができました</div><span class="stage-caption">HANABI ATELIER</span></div><div class="stage-bottom"><span class="eyebrow">一瞬の光に、名をつける。</span><span class="stage-english">DESIGN YOUR FIREWORK</span></div></div></div></section>
 <section class="name-panel" aria-labelledby="tamaTitle"><div class="section-label"><span id="tamaTitle">02 / FIREWORK NAME</span><span class="sub">完成した玉名</span></div><div class="name-reading" id="nameReading" aria-live="polite"></div><div class="name" id="name" aria-live="polite"></div><div class="detail"><div class="detail-title">✧ 打ち上げ演出</div><div class="description" id="narrative">7項目を選ぶか、玉名を入力して花火を作ってみましょう。</div></div></section>
