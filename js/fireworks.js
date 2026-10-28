@@ -7,6 +7,8 @@ const effectCanvas=document.createElement('canvas'),ctx=effectCanvas.getContext(
 const starCanvas=document.createElement('canvas'),starCtx=starCanvas.getContext('2d');
 // 菊専用の残光レイヤー。軌跡の折れ線を保存せず、星の移動に合わせて光を蓄積する。
 const kikuAfterglowCanvas=document.createElement('canvas'),kikuAfterglowCtx=kikuAfterglowCanvas.getContext('2d');
+// 引きが燃え尽きた後だけ残る、非常に淡い煙の軌跡。花火終了時には消去。
+const kikuSmokeCanvas=document.createElement('canvas'),kikuSmokeCtx=kikuSmokeCanvas.getContext('2d');
 const peakCanvas=document.createElement('canvas'),peakCtx=peakCanvas.getContext('2d');
 let peakScore=0,peakCount=0,peakTime=0,peakReady=false,photoRequested=false,peakName='';
 function resetPeakPhoto(){
@@ -47,8 +49,8 @@ function presentSky(){
 }
 function resize(){
  const rect=canvas.getBoundingClientRect();DPR=Math.min(window.devicePixelRatio||1,1.5);W=rect.width;H=rect.height;
- for(const layer of [canvas,effectCanvas,starCanvas,kikuAfterglowCanvas]){layer.width=Math.round(W*DPR);layer.height=Math.round(H*DPR)}
- for(const context of [displayCtx,ctx,starCtx,kikuAfterglowCtx])context.setTransform(DPR,0,0,DPR,0,0);
+ for(const layer of [canvas,effectCanvas,starCanvas,kikuAfterglowCanvas,kikuSmokeCanvas]){layer.width=Math.round(W*DPR);layer.height=Math.round(H*DPR)}
+ for(const context of [displayCtx,ctx,starCtx,kikuAfterglowCtx,kikuSmokeCtx])context.setTransform(DPR,0,0,DPR,0,0);
  paintStarBackground();presentSky();
 }
 window.addEventListener('resize',resize);resize();
@@ -155,7 +157,7 @@ updateSound();
 
 function launch(){const request=++launchRequest;stopSounds();const ready=soundPrefs.enabled?ensureAudio():null;const begin=()=>{if(request===launchRequest)beginLaunch()};if(ready)ready.then(begin).catch(()=>{$('soundNote').textContent='音源を読み込めませんでした。再読み込みしてお試しください。';begin()});else begin()}
 function clearSky(){ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";ctx.clearRect(0,0,W,H)}
-function beginLaunch(){prepareAscentPattern();groupRoarPlayed=false;clearSky();kikuAfterglowCtx.clearRect(0,0,W,H);if(!current&&!generate(false))return;resetPeakPhoto();peakName=current.name;$('snapshot').disabled=false;t=0;particles=[];trails=[];flashes=[];bloomFlashes=[];active=true;burstDone=false;paused=false;$('status').textContent='ASCENT — 打ち上げ中';lastTime=performance.now();launchSound()}
+function beginLaunch(){prepareAscentPattern();groupRoarPlayed=false;clearSky();kikuAfterglowCtx.clearRect(0,0,W,H);kikuSmokeCtx.clearRect(0,0,W,H);if(!current&&!generate(false))return;resetPeakPhoto();peakName=current.name;$('snapshot').disabled=false;t=0;particles=[];trails=[];flashes=[];bloomFlashes=[];active=true;burstDone=false;paused=false;$('status').textContent='ASCENT — 打ち上げ中';lastTime=performance.now();launchSound()}
 function burst(x,y){const mainStart=particles.length;const v=current, sh=v.shape, clr=cColor(v.baseColor), seq=v.sequence.map(cColor), end=v.ending;
 const flicker=end==='点滅'; // 先点滅は末端のみ点滅（下の p.ending 判定）
 // 開花直後の一瞬の閃光。星の種類を変えずに「玉が割れた」瞬間を強調する。
@@ -791,12 +793,23 @@ function render(now){let dt=Math.min((now-lastTime)/1000,.045)*(Number($('speed'
 if(active&&current?.shape==='kiku'){
  // 先変化の開始前に、既に引いた尾の残光も消し切る。
  // 尾を発生させないだけでは蓄積レイヤーの古い色が残るため、後半は減衰を速める。
- const tipStars=current.mode==='先'?particles.filter(p=>p.kind==='kiku-star'&&p.delay<=0):[];
+ const tipStars=particles.filter(p=>p.kind==='kiku-star'&&p.seqMode==='先'&&p.seq.length&&p.delay<=0);
  const tipProgress=tipStars.length?1-tipStars[0].ttl/tipStars[0].life:0;
  // 先色が現れる前に蓄積した引き色を確実に消す。
- const tipAfterglowFade=tipProgress>.38?Math.min(1,(tipProgress-.38)/.18):0;
+ const tipAfterglowFade=tipProgress>.26?Math.min(1,(tipProgress-.26)/.18):0;
  const afterglowRetention=.89-(.89-.10)*tipAfterglowFade;
  const fade=1-Math.pow(afterglowRetention,dt*60);
+ // 先色が出始める時点では、以前の引き色の残光を一切重ねない。
+ // 煙は別レイヤーなので、このクリア処理で消えない。
+ // 先色より前、尾が燃え尽きる時点で旧引き色の残光を完全消去。
+ // modeは表示側のcurrentではなく実際の星のseqModeで判定する。
+ const tailExtinguished=tipStars[0]?.seq?.length>1?.43:.46;
+ if(tipStars.length&&tipProgress>=tailExtinguished){
+   kikuAfterglowCtx.save();
+   kikuAfterglowCtx.setTransform(1,0,0,1,0,0);
+   kikuAfterglowCtx.clearRect(0,0,kikuAfterglowCanvas.width,kikuAfterglowCanvas.height);
+   kikuAfterglowCtx.restore();
+ }
  kikuAfterglowCtx.save();kikuAfterglowCtx.setTransform(1,0,0,1,0,0);
  kikuAfterglowCtx.globalCompositeOperation='destination-out';
  kikuAfterglowCtx.fillStyle=`rgba(0,0,0,${fade})`;
@@ -804,6 +817,15 @@ if(active&&current?.shape==='kiku'){
  kikuAfterglowCtx.restore();
  ctx.save();ctx.globalAlpha=.68;ctx.globalCompositeOperation='source-over';
  ctx.drawImage(kikuAfterglowCanvas,0,0,kikuAfterglowCanvas.width,kikuAfterglowCanvas.height,0,0,W,H);
+ ctx.restore();
+ // 煙は引きの残光と別レイヤーで管理。明るい尾が消えた後にだけ薄く残す。
+ kikuSmokeCtx.save();kikuSmokeCtx.setTransform(1,0,0,1,0,0);
+ kikuSmokeCtx.globalCompositeOperation='destination-out';
+ kikuSmokeCtx.fillStyle=`rgba(0,0,0,${1-Math.pow(.975,dt*60)})`;
+ kikuSmokeCtx.fillRect(0,0,kikuSmokeCanvas.width,kikuSmokeCanvas.height);
+ kikuSmokeCtx.restore();
+ ctx.save();ctx.globalCompositeOperation='source-over';ctx.globalAlpha=.24;
+ ctx.drawImage(kikuSmokeCanvas,0,0,kikuSmokeCanvas.width,kikuSmokeCanvas.height,0,0,W,H);
  ctx.restore();
 }
 if(active){t+=dt;updateWhistle();if(current.ending==='群声'&&!groupRoarPlayed&&t>=BURST_AUDIO_OFFSET+2.6){groupRoarPlayed=true;groupRoarSound()}const x=W*.5,y=H*.42;
@@ -843,12 +865,12 @@ if(active){t+=dt;updateWhistle();if(current.ending==='群声'&&!groupRoarPlayed&
    if(t-p.beeTrailTime>.045){p.beeTrail.push({x:p.x,y:p.y,time:t});p.beeTrailTime=t}
    while(p.beeTrail.length>8||p.beeTrail.length>1&&t-p.beeTrail[0].time>.30)p.beeTrail.shift();
  }
- if(p.kind==='senrin-kiku-star'){
+ if(p.kind==='senrin-kiku-star'||p.kind==='kiku-star'){
    if(!p.kikuTrail){
      p.kikuTrail=[{x:oldX,y:oldY,time:t-dt}];
      p.kikuOriginX=oldX;p.kikuOriginY=oldY;
    }
-   if(t-(p.kikuTrailTime||0)>=(p.kind==='senrin-kiku-star'?.060:0)){
+   if(t-(p.kikuTrailTime||0)>=(p.kind==='senrin-kiku-star'?.060:.045)){
      p.kikuTrail.push({x:p.x,y:p.y,time:t});p.kikuTrailTime=t;
    }
    while(p.kikuTrail.length>2&&(p.kikuTrail.length>(p.kind==='senrin-kiku-star'?24:80)||t-p.kikuTrail[1].time>(p.kind==='senrin-kiku-star'?1.35:1.75*(p.kikuTailLife||1))))p.kikuTrail.shift();
@@ -885,10 +907,10 @@ if(active){t+=dt;updateWhistle();if(current.ending==='群声'&&!groupRoarPlayed&
  // 親星の尾はこの色変化に巻き込まず、元の引き色を保つ。
  let kikuTipIntensity=0;
  if(p.kind==='kiku-star'&&p.seqMode==='先'&&seq.length){
-   const shift=p.kikuTipOffset||0;
-   // 引き色から緑へ混色しない。引きが消えた後に緑だけを点灯させる。
+   const shift=0;
+   // 引き色から先色へ混色しない。引きが消えた後に緑だけを点灯させる。
    // 星ごとの時間差を狭め、先に変色した星と引き色の星が混在するのを抑える。
-   const onset=(seq.length>1?.65:.68)+shift*.28;
+   const onset=(seq.length>1?.56:.59)+shift*.28;
    if(lifeFrac>=onset){
      co=seq[0];
      kikuTipIntensity=Math.min(1,(lifeFrac-onset)/.035);
@@ -917,11 +939,11 @@ if(active){t+=dt;updateWhistle();if(current.ending==='群声'&&!groupRoarPlayed&
  // 菊先はマジック牡丹ではない。星先を消灯せず、引きの尾だけ先に薄くする。
  // 引き色の先端は小さく残し、変化時に混色せず変化色へ直接切り替える。
  if(p.kind==='kiku-star'&&p.seqMode==='先'&&seq.length){
-   const shift=(p.kikuTipOffset||0)*.28;
-   const onset=(seq.length>1?.65:.68)+shift;
+   const shift=0;
+   const onset=(seq.length>1?.56:.59)+shift;
    if(lifeFrac<onset){
-     const headFade=Math.min(1,Math.max(0,(lifeFrac-.40)/Math.max(.05,onset-.40)));
-     alpha*=1-.67*headFade;
+     const headFade=Math.min(1,Math.max(0,(lifeFrac-.36)/Math.max(.05,onset-.36)));
+     alpha*=1-.28*headFade;
    }
  }
  if(alpha<.012&&p.kind!=='palm-frond')continue;
@@ -1127,21 +1149,48 @@ if(active){t+=dt;updateWhistle();if(current.ending==='群声'&&!groupRoarPlayed&
    const burnOffset=p.kikuBurnOffset||0;
    const tailStart=Math.min(1,Math.max(0,(lifeFrac-.003)/.035));
    const lateFade=Math.max(0,Math.min(1,(1.04-lifeFrac-burnOffset)/.27));
-   const strength=(nishiki?1:.83)*(p.kikuTailVariation||1);
+   // 先色の引きは光量を控えめにし、長めの一本の光条として伸ばす。
+   const strength=(p.seqMode==='先'?.53:(nishiki?1:.83))*(p.kikuTailVariation||1);
    // 菊先は引きの尾を自然に減光し、先端が変化する前に消し切る。
    // 星先そのものは消灯しない（無光の間を作るのはマジック牡丹のみ）。
-   const tipFadeStart=seq.length>1?.35:.38;
-   const tipFadeEnd=seq.length>1?.58:.61;
+   const tipFadeStart=seq.length>1?.27:.30;
+   const tipFadeEnd=seq.length>1?.43:.46;
    const tipFade=p.seqMode==='先'&&seq.length
      ?1-Math.min(1,Math.max(0,(lifeFrac-tipFadeStart)/(tipFadeEnd-tipFadeStart)))
      :1;
+   // 光る尾が完全に消えた時点で、記録済みの軌跡を淡い灰色の煙に置き換える。
+   // 星先は消灯させず、先色への切替えもそのまま。
+   if(p.seqMode==='先'&&seq.length&&tipFade<=0&&!p.kikuSmokeDrawn){
+     p.kikuSmokeDrawn=true;
+     // 引きの色を持つ線はここで終了。煙は固定された灰色の軌跡のみ。
+     const path=(p.kikuTrail||[]).filter(pt=>Number.isFinite(pt.x)&&Number.isFinite(pt.y));
+     if(path.length>2){
+       kikuSmokeCtx.save();
+       kikuSmokeCtx.globalCompositeOperation='source-over';
+       kikuSmokeCtx.strokeStyle='#9298a1';
+       kikuSmokeCtx.globalAlpha=.17;
+       kikuSmokeCtx.lineWidth=1.65*scale;
+       kikuSmokeCtx.lineCap='round';
+       // 花火の中心から煙を描くと、数百本が重なり白い円形のもやになる。
+       // 内側の軌跡を省き、外側に残る引きの部分だけを煙にする。
+       const startIndex=Math.max(1,Math.floor(path.length*.42));
+       kikuSmokeCtx.beginPath();
+       kikuSmokeCtx.moveTo(path[startIndex].x,path[startIndex].y);
+       for(let k=startIndex+1;k<path.length;k++)kikuSmokeCtx.lineTo(path[k].x,path[k].y);
+       kikuSmokeCtx.stroke();
+       kikuSmokeCtx.restore();
+     }
+   }
    const opacity=Math.max(0,Math.min(1,alpha*tailStart*lateFade*strength*tipFade));
    if(opacity>.012){
      // velocity は px/s。描画フレーム長に依存しない短い光条に換算する。
      // 動きの速い開花直後は長く、減速すると短くなる。
      const vx=p.vx,vy=p.vy;
      const speed=Math.hypot(vx,vy);
-     const reach=Math.min(23*scale,Math.max(2.4*scale,speed*.115));
+     // 菊先の尾は従来より長く伸ばす。先色点灯時にはこの発光尾を描かない。
+     const reach=p.seqMode==='先'
+       ?Math.min(38*scale,Math.max(5*scale,speed*.18))
+       :Math.min(23*scale,Math.max(2.4*scale,speed*.115));
      const ux=speed>.001?vx/speed:0,uy=speed>.001?vy/speed:0;
      const fromX=p.x-ux*reach,fromY=p.y-uy*reach;
      // 菊先の変化は新しい光条にだけ反映。すでに残った尾は元の色を保つ。
@@ -1149,15 +1198,17 @@ if(active){t+=dt;updateWhistle();if(current.ending==='群声'&&!groupRoarPlayed&
      // 錦・金の菊だけ従来の強い加算発光を残す。
      const colorKiku=!nishiki;
      const trailColor=p.seqMode==='先'?(p.trailColor||p.color):(referenceChangingKiku?co:(p.trailColor||p.color));
-     for(const c of [kikuAfterglowCtx,ctx]){
-       c.save();c.globalCompositeOperation=colorKiku?'source-over':'lighter';c.lineCap='round';
+     // 菊先は残光キャンバスに引き色を焼き付けない。
+     // 古い金色の尾が先色の背後に残る問題を根本的に防ぐ。
+     for(const c of (p.seqMode==='先'?[ctx]:[kikuAfterglowCtx,ctx])){
+       c.save();c.globalCompositeOperation=p.seqMode==='先'?'source-over':(colorKiku?'source-over':'lighter');c.lineCap='round';
        c.strokeStyle=trailColor;
        const afterLayer=c===kikuAfterglowCtx;
-       c.globalAlpha=opacity*(colorKiku?(afterLayer?.14:.20):(afterLayer?.27:.21));
+       c.globalAlpha=opacity*(p.seqMode==='先'?.13:(colorKiku?(afterLayer?.14:.20):(afterLayer?.27:.21)));
        c.lineWidth=(nishiki?3.5:3.0)*scale;
        c.beginPath();c.moveTo(fromX,fromY);c.lineTo(p.x,p.y);c.stroke();
-       c.globalAlpha=opacity*(colorKiku?(afterLayer?.62:.94):(afterLayer?.95:.82));
-       c.lineWidth=(nishiki?1.55:1.28)*scale;
+       c.globalAlpha=opacity*(p.seqMode==='先'?.68:(colorKiku?(afterLayer?.62:.94):(afterLayer?.95:.82)));
+       c.lineWidth=(p.seqMode==='先'?1.18:(nishiki?1.55:1.28))*scale;
        c.beginPath();c.moveTo(fromX,fromY);c.lineTo(p.x,p.y);c.stroke();
        c.restore();
      }
@@ -1268,7 +1319,7 @@ if(active){t+=dt;updateWhistle();if(current.ending==='群声'&&!groupRoarPlayed&
    ctx.beginPath();ctx.moveTo(p.x-ux*1.15,p.y-uy*1.15);ctx.lineTo(p.x,p.y);ctx.stroke();
  }
  }
- drawBloomFlashes(dt);ctx.globalAlpha=1;if(t>9.6 && particles.length===0){active=false;$('status').textContent='FINISHED — 花火が消えました'}
+ drawBloomFlashes(dt);ctx.globalAlpha=1;if(t>9.6 && particles.length===0){active=false;kikuSmokeCtx.clearRect(0,0,W,H);kikuAfterglowCtx.clearRect(0,0,W,H);$('status').textContent='FINISHED — 花火が消えました'}
 }presentSky();capturePeakPhoto();if(active){requestAnimationFrame(render)}else{lastTime=now;requestAnimationFrame(render)}}requestAnimationFrame(render);
 let photoFile=null,photoURL=null;
 function preparePeakFile(){
