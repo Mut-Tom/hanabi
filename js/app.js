@@ -1,7 +1,9 @@
 const KEYS=['昇曲導','芯部','基本色・光跡','玉の種類','開花後の変化','変化する色','消え際'];const IDs=['ascent','core','base','type','change','colors','ending'];const COLORS={'紅':'#ff6888','緑':'#77f5aa','青':'#68b8ff','黄':'#ffce54','紫':'#dab5ff','銀':'#e7f2ff','金':'#efbd65','錦':'#ffd08a','輝':'#fff5d5'};
 const $=id=>document.getElementById(id);const rand=(a,b)=>a+Math.random()*(b-a),pick=a=>a[Math.floor(Math.random()*a.length)];const fields={};let current=null;let autoAscent=false,autoColors=false,userColorPicked=false;
 function uniqueNames(i){const a=new Map();TABLES[i].forEach(e=>{if(!a.has(e.name))a.set(e.name,e)});return [...a.values()]}
-KEYS.forEach((k,i)=>{const field=document.createElement('div');field.className='field';const label=document.createElement('label');label.textContent='0'+(i+1)+' '+k+(i===0?'（上昇中の演出）':i===1?'（花火の内側の輪）':'');label.htmlFor=IDs[i];const select=document.createElement('select');select.id=IDs[i];select.setAttribute('aria-label',k);const option=document.createElement('option');option.value='';option.textContent='ランダム';select.appendChild(option);const noneOption=document.createElement('option');noneOption.value='なし';noneOption.textContent='なし';select.appendChild(noneOption);uniqueNames(i).filter(v=>v.name!=='なし').forEach(v=>{const o=document.createElement('option');o.value=v.name;o.textContent=v.name;select.appendChild(o)});select.value='なし';select.addEventListener('change',()=>{
+const COLOR_MARKS={'紅':'🔴','緑':'🟢','青':'🔵','黄':'🟡','紫':'🟣','銀':'⚪','金':'🟠','錦':'🟠'};
+function colorOptionLabel(i,name){if(i===0){const m=name.match(/^昇([紅緑青黄紫銀金錦])/);return m?COLOR_MARKS[m[1]]+' '+name:name;}return (i===2||i===5)&&name!=='なし'?[...name].map(ch=>COLOR_MARKS[ch]||'').join('')+' '+name:name;}
+KEYS.forEach((k,i)=>{const field=document.createElement('div');field.className='field';const label=document.createElement('label');label.textContent='0'+(i+1)+' '+k+(i===0?'（上昇中の演出）':i===1?'（花火の内側の輪）':'');label.htmlFor=IDs[i];const select=document.createElement('select');select.id=IDs[i];select.setAttribute('aria-label',k);const option=document.createElement('option');option.value='';option.textContent='ランダム';select.appendChild(option);const noneOption=document.createElement('option');noneOption.value='なし';noneOption.textContent='なし';select.appendChild(noneOption);uniqueNames(i).filter(v=>v.name!=='なし').forEach(v=>{const o=document.createElement('option');o.value=v.name;o.textContent=colorOptionLabel(i,v.name);select.appendChild(o)});select.value='なし';select.addEventListener('change',()=>{
  if(i===0)autoAscent=select.value==='';
  if(i===5){autoColors=select.value==='';userColorPicked=select.value!=='';}
  // 変化・染分で色を指定しない場合は、ランダムを維持して毎回2色を抽選。
@@ -13,7 +15,7 @@ KEYS.forEach((k,i)=>{const field=document.createElement('div');field.className='
 function has(s,n){return s.includes(n)}
 function colorSequence(str){return [...str].filter(ch=>COLORS[ch])}
 function role(n){if(n.includes('千輪'))return 'senrin';if(n.includes('冠'))return 'crown';if(n.includes('牡丹'))return 'botan';if(n.includes('菊'))return 'kiku';if(n.includes('柳'))return 'willow';if(n.includes('椰子'))return 'palm';if(n.includes('蜂')&&!n.includes('飛'))return 'bee';if(n.includes('飛遊星'))return 'fly';if(n.includes('花雷'))return 'thunder';if(n.includes('万華鏡'))return 'cluster';if(n.includes('ダリヤ'))return 'botan';if(n.includes('ハート'))return 'heart';if(n.includes('蝶'))return 'butterfly';if(n.includes('土星'))return 'saturn';return 'kiku'}
-function basicColor(n){if(n==='なし')return '炭';if(n==='銀波')return '銀';if(n==='錦')return '錦';return COLORS[n]?n:'炭'}
+function basicColor(n){if(n==='なし')return '炭';if(n==='錦')return '錦';return COLORS[n]?n:'炭'}
 const none=()=>({name:'なし',desc:'',note:''});
 function randomEntry(i,override){return override?TABLES[i].find(x=>x.name===override)||none():pick(TABLES[i])}
 function resolve(input){
@@ -26,9 +28,7 @@ function resolve(input){
    if(b.name!=='なし')notices.push('② この玉種では芯部を無効');b=none();
  }
  if(senrin||cluster){c=none();}
- else if(c.name==='銀波'&&sh!=='kiku'){
-   const pool=TABLES[2].filter(o=>o.name!=='銀波');c={...pick(pool)};notices.push('③ 銀波は菊限定のため振り直し');
- }
+
  if(special||willow){if(!['なし','紅','緑','青','黄','紫','銀','錦'].includes(c.name))c=none()}
  if(crown&&!['なし','紅','緑','青','黄','紫','銀','錦'].includes(c.name))c=none();
  const allowedMode=senrin||crown||cluster||special?['なし']:willow?['なし','先']:['なし','先','変化','染分'];
@@ -40,8 +40,8 @@ function resolve(input){
  const validColors=TABLES[5].filter(o=>{
    const s=colorSequence(o.name);
    // ③基本色と⑥の全色（単色・2色の両方）を重複させない。
-   // 銀波の基調は銀として比較する。「なし」は比較対象外。
-   const baseColor=c.name==='銀波'?'銀':c.name;
+   // 「なし」は比較対象外。
+   const baseColor=c.name;
    if(COLORS[baseColor]&&s.includes(baseColor))return false;
    if(e.name==='先')return (s.length>=1&&s.length<=2)||(o.name==='なし'&&g.name==='点滅');
    if(e.name==='染分')return s.length===2&&s[0]!==s[1];
@@ -66,7 +66,7 @@ function resolve(input){
  if(e.name==='先'&&f.name==='なし'&&!tipBlink){f={...pick(validColors.filter(o=>o.name!=='なし'))};}
  let body=c.name==='なし'?'':c.name;
  if(e.name==='染分'){
-   body=(sh==='botan'?'':(c.name==='錦'||c.name==='銀波'?c.name:''))+f.name+'染分'+type;
+   body=(sh==='botan'?'':(c.name==='錦'?c.name:''))+f.name+'染分'+type;
  }else if(e.name==='変化')body+='変化'+type;
  else body+=type;
  if(e.name==='先')body+=tipBlink?'先点滅':'先'+f.name;

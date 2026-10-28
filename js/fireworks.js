@@ -5,6 +5,8 @@ let active=false,t=0,lastTime=0,particles=[],trails=[],flashes=[],burstDone=fals
 const canvas=$('sky'),displayCtx=canvas.getContext('2d');
 const effectCanvas=document.createElement('canvas'),ctx=effectCanvas.getContext('2d');
 const starCanvas=document.createElement('canvas'),starCtx=starCanvas.getContext('2d');
+// 菊専用の残光レイヤー。軌跡の折れ線を保存せず、星の移動に合わせて光を蓄積する。
+const kikuAfterglowCanvas=document.createElement('canvas'),kikuAfterglowCtx=kikuAfterglowCanvas.getContext('2d');
 const peakCanvas=document.createElement('canvas'),peakCtx=peakCanvas.getContext('2d');
 let peakScore=0,peakCount=0,peakTime=0,peakReady=false,photoRequested=false,peakName='';
 function resetPeakPhoto(){
@@ -45,8 +47,8 @@ function presentSky(){
 }
 function resize(){
  const rect=canvas.getBoundingClientRect();DPR=Math.min(window.devicePixelRatio||1,1.5);W=rect.width;H=rect.height;
- for(const layer of [canvas,effectCanvas,starCanvas]){layer.width=Math.round(W*DPR);layer.height=Math.round(H*DPR)}
- for(const context of [displayCtx,ctx,starCtx])context.setTransform(DPR,0,0,DPR,0,0);
+ for(const layer of [canvas,effectCanvas,starCanvas,kikuAfterglowCanvas]){layer.width=Math.round(W*DPR);layer.height=Math.round(H*DPR)}
+ for(const context of [displayCtx,ctx,starCtx,kikuAfterglowCtx])context.setTransform(DPR,0,0,DPR,0,0);
  paintStarBackground();presentSky();
 }
 window.addEventListener('resize',resize);resize();
@@ -153,7 +155,7 @@ updateSound();
 
 function launch(){const request=++launchRequest;stopSounds();const ready=soundPrefs.enabled?ensureAudio():null;const begin=()=>{if(request===launchRequest)beginLaunch()};if(ready)ready.then(begin).catch(()=>{$('soundNote').textContent='音源を読み込めませんでした。再読み込みしてお試しください。';begin()});else begin()}
 function clearSky(){ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";ctx.clearRect(0,0,W,H)}
-function beginLaunch(){prepareAscentPattern();groupRoarPlayed=false;clearSky();if(!current&&!generate(false))return;resetPeakPhoto();peakName=current.name;$('snapshot').disabled=false;t=0;particles=[];trails=[];flashes=[];bloomFlashes=[];active=true;burstDone=false;paused=false;$('status').textContent='ASCENT — 打ち上げ中';lastTime=performance.now();launchSound()}
+function beginLaunch(){prepareAscentPattern();groupRoarPlayed=false;clearSky();kikuAfterglowCtx.clearRect(0,0,W,H);if(!current&&!generate(false))return;resetPeakPhoto();peakName=current.name;$('snapshot').disabled=false;t=0;particles=[];trails=[];flashes=[];bloomFlashes=[];active=true;burstDone=false;paused=false;$('status').textContent='ASCENT — 打ち上げ中';lastTime=performance.now();launchSound()}
 function burst(x,y){const mainStart=particles.length;const v=current, sh=v.shape, clr=cColor(v.baseColor), seq=v.sequence.map(cColor), end=v.ending;
 const flicker=end==='点滅'; // 先点滅は末端のみ点滅（下の p.ending 判定）
 // 開花直後の一瞬の閃光。星の種類を変えずに「玉が割れた」瞬間を強調する。
@@ -342,21 +344,25 @@ else {
    if(sh==='kiku'){
      // 菊の花形・星数・開花速度・消え方は牡丹と完全に共通。
      // 相違は星の通過地点に残る、時間とともに消える尾だけ。
-     sphericalBloom(x,y,510,194,clr,
-       {...opts,grav:3.5,drag:.987,life:3.35,kind:'kiku-star'},splitCols);
+     // 参考録画：密集した510本の直線ではなく、各星が軌跡を引く放射花弁。
+     // 牡丹と同等の開花半径を保ちつつ、初動を少し速める。
+     sphericalBloom(x,y,310,210,clr,
+       {...opts,grav:12,drag:.988,life:3.35,kind:'kiku-star'},splitCols);
      for(const star of particles.slice(start)){
        // 菊先は渋い橙色の控えめな尾、錦先は輝度の高い金色の尾。
-       // 染分では従来どおり各星の初期色を保ち、先端の変色は尾へ伝播させない。
+       // 染分は左右を縦に二分割し、星先と引きの尾を同じ色にする。
        star.botanRadius=rand(.92,1.55);
        star.botanGlow=rand(.65,1.1);
-       star.kikuNishiki=v.baseColor==='錦'||v.baseColor==='金';
-       star.trailColor=star.kikuNishiki?'#efbc62':(v.baseColor==='炭'?'#d88a4c':star.color);
+       star.kikuNishiki=!splitCols&&(v.baseColor==='錦'||v.baseColor==='金');
+       star.trailColor=splitCols?star.color:(star.kikuNishiki?'#efbc62':(v.baseColor==='炭'?'#d88a4c':star.color));
        star.kikuTailBrightness=star.kikuNishiki?1.18:.86;
        // 星ごとに先端の変色開始をわずかにずらし、外周が一斉に塗り替わらないようにする。
        star.kikuTipOffset=(twinkleHash(star.twinkleSeed^0x7c35)-.5)*.055;
        star.kikuTrail=[{x,y,time:t}];star.kikuTrailTime=t;star.kikuOriginX=x;star.kikuOriginY=y;
        star.kikuTailVariation=.78+twinkleHash(star.twinkleSeed^0x9d27)*.43;
-       star.kikuTailLife=.88+twinkleHash(star.twinkleSeed^0x723a)*.25;
+       star.kikuTailLife=.94+twinkleHash(star.twinkleSeed^0x723a)*.27;
+       // ひとつひとつの尾の減光開始をずらし、輪郭が一斉に消えないようにする。
+       star.kikuBurnOffset=(twinkleHash(star.twinkleSeed^0x3f31)-.5)*.22;
      }
    }else{
      sphericalBloom(x,y,510,194,clr,
@@ -437,7 +443,40 @@ if(v.core&&sh!=='senrin'){
      }
    }
  };
- if(coreName.includes('彩色芯')){
+ if(coreName.includes('雌雄芯')){
+   // 参考写真：中心の青紫の細い放射光と、太い錦色の椰子状の光彩。
+   // 通常の芯の円環・球殻は生成しない。色は親玉の色や変化指定と無関係に固定。
+   // 放射状の細い光だけは開花ごとに色を変える。錦色の太い枝は固定。
+   const blue=cColor(pick(['紅','緑','青','黄','紫','銀','金']));
+   const gold='#f7a44b',goldTip='#f9b66c';
+   const blueCount=128,bluePhase=rand(0,Math.PI*2);
+   for(let i=0;i<blueCount;i++){
+     const theta=bluePhase+i*2.3999632297+rand(-.09,.09);
+     const speed=parentRadius*rand(.28,.49);
+     particle(x,y,Math.cos(theta)*speed,Math.sin(theta)*speed,blue,rand(1.40,1.88),
+       {kind:'core-shiyu-blue',trail:0,drag:.985,grav:1.4,seq:[],size:1.2});
+   }
+   // 花のしべのように不均等な6〜8本の太い錦色の枝。
+   // 各枝を複数の近接した火花に分け、先端がほぐれる椰子状にする。
+   const armCount=7,phase=rand(0,Math.PI*2);
+   for(let i=0;i<armCount;i++){
+     const theta=phase+i*Math.PI*2/armCount+rand(-.22,.22);
+     const baseSpeed=parentRadius*rand(.32,.47);
+     for(let j=0;j<4;j++){
+       const spread=j===0?0:(j-2)*rand(.035,.10);
+       const angle=theta+spread;
+       const speed=baseSpeed*(j===0?1:rand(.78,1.10));
+       particle(x,y,Math.cos(angle)*speed,Math.sin(angle)*speed,
+         j===0?gold:goldTip,rand(1.70,2.20),
+         {kind:'core-stamen',trail:0,drag:.987,grav:2.7,seq:[],size:2.0});
+       const star=particles[particles.length-1];
+       star.stamenStartX=x;star.stamenStartY=y;
+       star.stamenStrength=j===0?1:rand(.38,.72);
+       star.stamenCurve=rand(-1,1)*(j===0?.09:.21);
+       star.stamenBranch=j!==0;
+     }
+   }
+ }else if(coreName.includes('彩色芯')){
    // 彩色芯は一つの小さな球に複数の色が混ざる。
    emitCore(.34,null,60,0,false,true);
  }else{
@@ -454,7 +493,12 @@ if(v.core&&sh!=='senrin'){
    });
  }
 }
-if(v.mode==='染分'){particles.forEach(p=>{if(p.kind==='regular'&&p.ttl===p.life&&p.delay===0)p.color=p.vx<0?cColor(v.sequence[0]):cColor(v.sequence[1])})}
+if(splitCols){particles.slice(mainStart).forEach(p=>{
+ // 染分の親星・付随火花は左半分／右半分の色に統一。芯星などの独立演出は除外。
+ if(['core-star','core-shiyu-blue','core-stamen','senrin-shell'].includes(p.kind))return;
+ const tint=p.vx<0?splitCols[0]:splitCols[1];
+ p.color=tint;p.seq=[];if(p.kind==='kiku-star'){p.trailColor=tint;p.kikuNishiki=false}
+ })}
 $('status').textContent='BLOOM — '+v.originalType;
 }
 // End effects change the existing stars; they never relocate them.
@@ -743,6 +787,25 @@ function drawAscentEffects(x,targetY,as,time,dt){
  if(as.includes('点滅'))drawGlowDot(x,yy,color,3.1,.30*Math.max(0,Math.sin(time*24)));
 }
 function render(now){let dt=Math.min((now-lastTime)/1000,.045)*(Number($('speed').value)/100);lastTime=now;ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';if(active&&current.originalType!=='糸柳'&&!['kiku','botan','heart','butterfly','saturn','fly','cluster','senrin','palm','crown'].includes(current.shape)){ctx.globalCompositeOperation='destination-out';ctx.fillStyle='rgba(0,0,0,.10)';ctx.fillRect(0,0,W,H);ctx.globalCompositeOperation='source-over'}else{clearSky()}ctx.globalAlpha=1;
+// 菊だけ独立した残光。実時間に基づき滑らかに薄くなり、他の玉種には影響しない。
+if(active&&current?.shape==='kiku'){
+ // 先変化の開始前に、既に引いた尾の残光も消し切る。
+ // 尾を発生させないだけでは蓄積レイヤーの古い色が残るため、後半は減衰を速める。
+ const tipStars=current.mode==='先'?particles.filter(p=>p.kind==='kiku-star'&&p.delay<=0):[];
+ const tipProgress=tipStars.length?1-tipStars[0].ttl/tipStars[0].life:0;
+ // 先色が現れる前に蓄積した引き色を確実に消す。
+ const tipAfterglowFade=tipProgress>.38?Math.min(1,(tipProgress-.38)/.18):0;
+ const afterglowRetention=.89-(.89-.10)*tipAfterglowFade;
+ const fade=1-Math.pow(afterglowRetention,dt*60);
+ kikuAfterglowCtx.save();kikuAfterglowCtx.setTransform(1,0,0,1,0,0);
+ kikuAfterglowCtx.globalCompositeOperation='destination-out';
+ kikuAfterglowCtx.fillStyle=`rgba(0,0,0,${fade})`;
+ kikuAfterglowCtx.fillRect(0,0,kikuAfterglowCanvas.width,kikuAfterglowCanvas.height);
+ kikuAfterglowCtx.restore();
+ ctx.save();ctx.globalAlpha=.68;ctx.globalCompositeOperation='source-over';
+ ctx.drawImage(kikuAfterglowCanvas,0,0,kikuAfterglowCanvas.width,kikuAfterglowCanvas.height,0,0,W,H);
+ ctx.restore();
+}
 if(active){t+=dt;updateWhistle();if(current.ending==='群声'&&!groupRoarPlayed&&t>=BURST_AUDIO_OFFSET+2.6){groupRoarPlayed=true;groupRoarSound()}const x=W*.5,y=H*.42;
  if(t<BURST_AUDIO_OFFSET){
   drawAscentEffects(x,y,current.ascent,t,dt);
@@ -780,20 +843,20 @@ if(active){t+=dt;updateWhistle();if(current.ending==='群声'&&!groupRoarPlayed&
    if(t-p.beeTrailTime>.045){p.beeTrail.push({x:p.x,y:p.y,time:t});p.beeTrailTime=t}
    while(p.beeTrail.length>8||p.beeTrail.length>1&&t-p.beeTrail[0].time>.30)p.beeTrail.shift();
  }
- if(p.kind==='kiku-star'||p.kind==='senrin-kiku-star'){
+ if(p.kind==='senrin-kiku-star'){
    if(!p.kikuTrail){
      p.kikuTrail=[{x:oldX,y:oldY,time:t-dt}];
      p.kikuOriginX=oldX;p.kikuOriginY=oldY;
    }
-   if(t-(p.kikuTrailTime||0)>=(p.kind==='senrin-kiku-star'?.060:.028)){
+   if(t-(p.kikuTrailTime||0)>=(p.kind==='senrin-kiku-star'?.060:0)){
      p.kikuTrail.push({x:p.x,y:p.y,time:t});p.kikuTrailTime=t;
    }
-   while(p.kikuTrail.length>2&&(p.kikuTrail.length>(p.kind==='senrin-kiku-star'?24:80)||t-p.kikuTrail[1].time>(p.kind==='senrin-kiku-star'?1.35:1.20*(p.kikuTailLife||1))))p.kikuTrail.shift();
+   while(p.kikuTrail.length>2&&(p.kikuTrail.length>(p.kind==='senrin-kiku-star'?24:80)||t-p.kikuTrail[1].time>(p.kind==='senrin-kiku-star'?1.35:1.75*(p.kikuTailLife||1))))p.kikuTrail.shift();
  }
  const lifeFrac=1-p.ttl/p.life,seq=p.seq;
  let co=p.color;
  if(seq.length){
-   if(p.seqMode==='先'){
+   if(p.seqMode==='先'&&p.kind!=='kiku-star'){
      const start=0.52;
      if(lifeFrac>=start){
        const local=(lifeFrac-start)/(1-start);
@@ -823,16 +886,17 @@ if(active){t+=dt;updateWhistle();if(current.ending==='群声'&&!groupRoarPlayed&
  let kikuTipIntensity=0;
  if(p.kind==='kiku-star'&&p.seqMode==='先'&&seq.length){
    const shift=p.kikuTipOffset||0;
-   const onset=(seq.length>1?.58:.64)+shift;
-   const firstMix=Math.max(0,Math.min(1,(lifeFrac-onset)/.055));
-   if(firstMix>0){
-     co=mixFireworkColor(p.color,seq[0],firstMix);
-     kikuTipIntensity=firstMix;
+   // 引き色から緑へ混色しない。引きが消えた後に緑だけを点灯させる。
+   // 星ごとの時間差を狭め、先に変色した星と引き色の星が混在するのを抑える。
+   const onset=(seq.length>1?.65:.68)+shift*.28;
+   if(lifeFrac>=onset){
+     co=seq[0];
+     kikuTipIntensity=Math.min(1,(lifeFrac-onset)/.035);
+     if(seq.length>1){
+       const secondMix=Math.max(0,Math.min(1,(lifeFrac-(.84+shift*.28))/.045));
+       if(secondMix>0)co=mixFireworkColor(seq[0],seq[seq.length-1],secondMix);
+     }
    }else co=p.color;
-   if(seq.length>1){
-     const secondMix=Math.max(0,Math.min(1,(lifeFrac-(.80+shift))/.045));
-     if(secondMix>0)co=mixFireworkColor(seq[0],seq[seq.length-1],secondMix);
-   }
  }
  let alpha=Math.min(1,p.ttl/(p.kind==='butterfly-outline'?1.3:p.kind==='thunder-core'?.5:.95))*(p.flicker?starTwinkle(p,t):1);
  if(p.ending==='光露'&&lifeFrac>=.84){co='#f2f7ff';if(lifeFrac<.91)alpha=Math.max(alpha,.95)}
@@ -849,6 +913,16 @@ if(active){t+=dt;updateWhistle();if(current.ending==='群声'&&!groupRoarPlayed&
  }
  if(p.ending==='小割浮模様'&&p.smallBloomSeed&&!p.smallBloomDone&&lifeFrac>=.80){
    openSmallBloom(p);particles.splice(i,1);continue;
+ }
+ // 菊先はマジック牡丹ではない。星先を消灯せず、引きの尾だけ先に薄くする。
+ // 引き色の先端は小さく残し、変化時に混色せず変化色へ直接切り替える。
+ if(p.kind==='kiku-star'&&p.seqMode==='先'&&seq.length){
+   const shift=(p.kikuTipOffset||0)*.28;
+   const onset=(seq.length>1?.65:.68)+shift;
+   if(lifeFrac<onset){
+     const headFade=Math.min(1,Math.max(0,(lifeFrac-.40)/Math.max(.05,onset-.40)));
+     alpha*=1-.67*headFade;
+   }
  }
  if(alpha<.012&&p.kind!=='palm-frond')continue;
  if(alpha>=.08){p.lastVisibleX=p.x;p.lastVisibleY=p.y;}
@@ -985,6 +1059,45 @@ if(active){t+=dt;updateWhistle();if(current.ending==='群声'&&!groupRoarPlayed&
    ctx.fillStyle=co;ctx.globalAlpha=alpha*.20;ctx.beginPath();ctx.arc(p.x,p.y,radius*2.2,0,Math.PI*2);ctx.fill();
    ctx.globalAlpha=alpha;ctx.beginPath();ctx.arc(p.x,p.y,radius,0,Math.PI*2);ctx.fill();continue;
  }
+ // 雌雄芯の青紫の放射光。円形の芯輪は描かず、中心から伸びる細い火花だけ。
+ if(p.kind==='core-shiyu-blue'){
+   const scale=Math.min(1.15,Math.max(.68,W/690));
+   const speed=Math.hypot(p.vx,p.vy)||1;
+   const reach=Math.min(20*scale,Math.max(4*scale,speed*.16));
+   const ux=p.vx/speed,uy=p.vy/speed;
+   ctx.save();ctx.globalCompositeOperation='source-over';ctx.lineCap='round';
+   ctx.strokeStyle=p.color;ctx.globalAlpha=alpha*.52;ctx.lineWidth=.9*scale;
+   ctx.beginPath();ctx.moveTo(p.x-ux*reach,p.y-uy*reach);ctx.lineTo(p.x,p.y);ctx.stroke();
+   ctx.restore();
+   continue;
+ }
+ // 雌雄芯の錦色の椰子状光彩。少数の太い枝が曲がりながら外へ伸びる。
+ if(p.kind==='core-stamen'){
+   const scale=Math.min(1.15,Math.max(.68,W/690));
+   const dx=p.x-p.stamenStartX,dy=p.y-p.stamenStartY;
+   const distance=Math.hypot(dx,dy);
+   if(distance>3&&alpha>.008){
+     const curve=p.stamenCurve||0;
+     const mx=(p.stamenStartX+p.x)*.5-dy*curve;
+     const my=(p.stamenStartY+p.y)*.5+dx*curve;
+     const grad=ctx.createLinearGradient(p.stamenStartX,p.stamenStartY,p.x,p.y);
+     grad.addColorStop(0,'rgba(247,164,75,0)');
+     grad.addColorStop(.36,p.color);
+     grad.addColorStop(1,p.color);
+     ctx.save();ctx.globalCompositeOperation='source-over';ctx.lineCap='round';
+     ctx.strokeStyle=grad;
+     ctx.beginPath();ctx.moveTo(p.stamenStartX,p.stamenStartY);
+     ctx.quadraticCurveTo(mx,my,p.x,p.y);
+     ctx.globalAlpha=alpha*(p.stamenStrength||1)*.26;
+     ctx.lineWidth=(p.stamenBranch?2.6:5.2)*scale;ctx.stroke();
+     ctx.globalAlpha=alpha*(p.stamenStrength||1)*.87;
+     ctx.lineWidth=(p.stamenBranch?1.05:2.0)*scale;ctx.stroke();
+     ctx.fillStyle=p.color;ctx.globalAlpha=alpha*(p.stamenStrength||1)*.7;
+     ctx.beginPath();ctx.arc(p.x,p.y,(p.stamenBranch?.85:1.4)*scale,0,Math.PI*2);ctx.fill();
+     ctx.restore();
+   }
+   continue;
+ }
  // 芯星：親星と同じ時刻に小さな球として開く。輪郭線や白い中心円は描かない。
  if(p.kind==='core-star'){
    const scale=Math.min(1.15,Math.max(.68,W/690));
@@ -1006,35 +1119,49 @@ if(active){t+=dt;updateWhistle();if(current.ending==='群声'&&!groupRoarPlayed&
    ctx.beginPath();ctx.arc(p.x,p.y,pointRadius,0,Math.PI*2);ctx.fill();
    continue;
  }
- // 菊の尾だけを牡丹と共通の丸い星より先に描画する。
- // 星の形・大きさ・明るさ・開花運動には触れない。
- // 開花直後は中心から勢いよく放射し、古い尾は通過後に薄く消える。
- if(p.kind==='kiku-star'&&p.kikuTrail&&p.kikuTrail.length>1){
-   const path=p.kikuTrail;
-   const nishiki=!!p.kikuNishiki;
+ // 菊：参考サイトと同じ「星の速度に沿う短い光条＋時間減衰する残光」。
+ // 履歴点をつなぐ長いポリラインは描かないため、開花直後のギザギザが出ない。
+ if(p.kind==='kiku-star'){
    const scale=Math.min(1.15,Math.max(.68,W/690));
-   const tailLife=(nishiki?1.15:.90)*(p.kikuTailLife||1);
-   const trailColor=p.trailColor||p.color;
-   const strength=(nishiki?.84:.67)*(p.kikuTailVariation||1);
-   ctx.save();
-   ctx.globalCompositeOperation='source-over';
-   ctx.lineCap='round';ctx.lineJoin='round';
-   ctx.strokeStyle=trailColor;
-   // 点ごとの寿命で尾の古い部分から自然に消灯。中心から放射状に伸びる。
-   // 各区間は細く描き、先端の丸い星を覆わない。
-   for(let j=1;j<path.length;j++){
-     const a=path[j-1],b=path[j];
-     const age=t-(a.time+b.time)*.5;
-     const fade=Math.max(0,1-age/tailLife);
-     if(fade<=0)continue;
-     const brightness=alpha*strength*Math.pow(fade,nishiki?1.25:1.6);
-     ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);
-     ctx.lineWidth=(nishiki?2.9:2.25)*scale;
-     ctx.globalAlpha=brightness*(nishiki?.17:.11);ctx.stroke();
-     ctx.lineWidth=(nishiki?1.28:.96)*scale;
-     ctx.globalAlpha=brightness*(nishiki?.75:.68);ctx.stroke();
+   const nishiki=!!p.kikuNishiki;
+   const burnOffset=p.kikuBurnOffset||0;
+   const tailStart=Math.min(1,Math.max(0,(lifeFrac-.003)/.035));
+   const lateFade=Math.max(0,Math.min(1,(1.04-lifeFrac-burnOffset)/.27));
+   const strength=(nishiki?1:.83)*(p.kikuTailVariation||1);
+   // 菊先は引きの尾を自然に減光し、先端が変化する前に消し切る。
+   // 星先そのものは消灯しない（無光の間を作るのはマジック牡丹のみ）。
+   const tipFadeStart=seq.length>1?.35:.38;
+   const tipFadeEnd=seq.length>1?.58:.61;
+   const tipFade=p.seqMode==='先'&&seq.length
+     ?1-Math.min(1,Math.max(0,(lifeFrac-tipFadeStart)/(tipFadeEnd-tipFadeStart)))
+     :1;
+   const opacity=Math.max(0,Math.min(1,alpha*tailStart*lateFade*strength*tipFade));
+   if(opacity>.012){
+     // velocity は px/s。描画フレーム長に依存しない短い光条に換算する。
+     // 動きの速い開花直後は長く、減速すると短くなる。
+     const vx=p.vx,vy=p.vy;
+     const speed=Math.hypot(vx,vy);
+     const reach=Math.min(23*scale,Math.max(2.4*scale,speed*.115));
+     const ux=speed>.001?vx/speed:0,uy=speed>.001?vy/speed:0;
+     const fromX=p.x-ux*reach,fromY=p.y-uy*reach;
+     // 菊先の変化は新しい光条にだけ反映。すでに残った尾は元の色を保つ。
+     // 紅・緑・青などの色菊は加算合成による白っぽい重なりを避ける。
+     // 錦・金の菊だけ従来の強い加算発光を残す。
+     const colorKiku=!nishiki;
+     const trailColor=p.seqMode==='先'?(p.trailColor||p.color):(referenceChangingKiku?co:(p.trailColor||p.color));
+     for(const c of [kikuAfterglowCtx,ctx]){
+       c.save();c.globalCompositeOperation=colorKiku?'source-over':'lighter';c.lineCap='round';
+       c.strokeStyle=trailColor;
+       const afterLayer=c===kikuAfterglowCtx;
+       c.globalAlpha=opacity*(colorKiku?(afterLayer?.14:.20):(afterLayer?.27:.21));
+       c.lineWidth=(nishiki?3.5:3.0)*scale;
+       c.beginPath();c.moveTo(fromX,fromY);c.lineTo(p.x,p.y);c.stroke();
+       c.globalAlpha=opacity*(colorKiku?(afterLayer?.62:.94):(afterLayer?.95:.82));
+       c.lineWidth=(nishiki?1.55:1.28)*scale;
+       c.beginPath();c.moveTo(fromX,fromY);c.lineTo(p.x,p.y);c.stroke();
+       c.restore();
+     }
    }
-   ctx.restore();
  }
  // 牡丹：星一粒ずつが球状に広がり、軌跡を残さず独立して消える。
  // 菊も同じ丸い星を描く。違いは上で描いた尾だけ。
@@ -1043,17 +1170,19 @@ if(active){t+=dt;updateWhistle();if(current.ending==='群声'&&!groupRoarPlayed&
    const glow=p.botanGlow||.9;
    // 白い芯を描かず、親星の色（染分や先変化を含む）をそのまま見せる。
    ctx.fillStyle=co;
-   ctx.globalAlpha=alpha*.14*glow;
-   ctx.beginPath();ctx.arc(p.x,p.y,radius*3.1,0,Math.PI*2);ctx.fill();
-   ctx.globalAlpha=alpha*.37*glow;
+   const headLight=p.kind==='kiku-star'?Math.min(1.25,1.10+Math.max(0,.25-lifeFrac)*.55):1;
+   const colorKikuHead=p.kind==='kiku-star'&&!p.kikuNishiki;
+   ctx.globalAlpha=Math.min(1,alpha*(colorKikuHead?.11:.19)*glow*headLight);
+   ctx.beginPath();ctx.arc(p.x,p.y,radius*(colorKikuHead?2.65:3.1),0,Math.PI*2);ctx.fill();
+   ctx.globalAlpha=Math.min(1,alpha*(colorKikuHead?.31:.43)*glow*headLight);
    ctx.beginPath();ctx.arc(p.x,p.y,radius*1.65,0,Math.PI*2);ctx.fill();
-   ctx.globalAlpha=alpha;
+   ctx.globalAlpha=Math.min(1,alpha*headLight);
    ctx.beginPath();ctx.arc(p.x,p.y,radius,0,Math.PI*2);ctx.fill();
    continue;
  }
  // 菊：星の先端は牡丹と同じ「丸い発光点」として残し、
  // 尾だけを時間経過で薄く消す。錦菊のみ金のきらめきを追加。
- if(p.kind==='kiku-star'||p.kind==='senrin-kiku-star'){
+ if(p.kind==='senrin-kiku-star'){
    if(!Number.isFinite(p.x)||!Number.isFinite(p.y))continue;
    const mini=p.kind==='senrin-kiku-star',nishiki=!!p.kikuNishiki;
    const scale=Math.min(1.12,Math.max(.70,W/690));
