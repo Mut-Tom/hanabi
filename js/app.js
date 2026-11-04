@@ -83,11 +83,11 @@ function resolve(input){
    f={...pick(validColors)};
  }
  const permitted=senrin?['なし','点滅']:special||willow||cluster?['なし','光露']:
-  crown?['なし','光露','降雪','銀乱','点滅','先割','群声','かすみ草','紅輝','小割浮模様','残輪']:null;
+  crown?['なし','光露','降雪','銀乱','点滅','先割','かすみ草','紅輝','小割浮模様','残輪']:null;
  const general=['kiku','botan','crown'].includes(sh);
  if((permitted&&!permitted.includes(g.name))||
    (!general&&!senrin&&g.name==='点滅')||
-   (!general&&['降雪','銀乱','先割','群声','かすみ草','紅輝','小割浮模様','残輪'].includes(g.name))){
+   (!general&&['降雪','銀乱','先割','かすみ草','紅輝','小割浮模様','残輪'].includes(g.name))){
    if(g.name!=='なし')notices.push('⑦ この玉種では消え際を無効');g=none();
  }
  const tipBlink=e.name==='先'&&f.name==='なし'&&g.name==='点滅';
@@ -136,7 +136,6 @@ function describeFirework(v){
  '先点滅':'星の末端部が明滅しながら消える。',
  '点滅':v.shape==='senrin'?'小花を構成する星が点滅しながら開く。':'玉を構成する星が点滅しながら開く。',
  '先割':'星が消える間際、パリパリと乾いた音を発する。',
- '群声':'星の終わり際、波の寄せるような「ザーッ」という音が響く。',
  'かすみ草':'星先が消えた後に、銀白色の綿毛のような細かな光が残る。',
  '紅輝':'星が消える直前に、紅色で一瞬強く輝く。',
  '小割浮模様':'本体の開花後に、小割玉の小花が浮かび上がる。',
@@ -182,6 +181,7 @@ function interpret(doPlay=true){
  const input=$('manual').value.trim().replace(/\s+/g,'').replace(/ダリヤ/g,'牡丹');
  if(!input){$('notice').textContent='玉名を入力してください';return}
  if(input.includes('蝶')){$('notice').textContent='蝶型花火は現在取り扱っていません。別の玉名を指定してください。';return}
+ if(['昇輝竜付','昇輝朴付','昇笛付','群声'].some(name=>input.includes(name))){$('notice').textContent='輝竜・輝朴・笛・群声は現在取り扱っていません。別の玉名を指定してください。';return}
  const notes=[];const names=i=>uniqueNames(i).filter(o=>o.name!=='なし').sort((a,b)=>b.name.length-a.name.length);
  const entry=(i,n)=>uniqueNames(i).find(o=>o.name===n)||none();let rest=input;
  // 「昇り曲導付き」など、種類を指定しない総称は①の実在する付加演出を抽選する。

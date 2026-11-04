@@ -208,7 +208,7 @@ function sphericalBloom(x,y,number,radius,color,opts={},split=null){
 // Uploaded recording by 効果音ラボ; split at the burst in the decoded buffer.
 let audioCtx=null,masterGain=null,whistle=null,soundSources=new Set(),audioRun=0;
 const BURST_AUDIO_OFFSET=1.97;
-let fireworkBuffer=null,decodePromise=null,launchRequest=0,groupRoarPlayed=false;
+let fireworkBuffer=null,decodePromise=null,launchRequest=0;
 const recordingPromise=fetch('./audio/firework-launch.mp3').then(r=>{if(!r.ok)throw Error('audio download');return r.arrayBuffer()}).catch(()=>null);
 let soundPrefs={enabled:true,volume:.5};
 try{const saved=JSON.parse(localStorage.getItem('hanabi-sound')||'null');if(saved){soundPrefs.enabled=saved.enabled!==false;const v=Number(saved.volume);if(Number.isFinite(v))soundPrefs.volume=Math.max(0,Math.min(1,v))}}catch(e){}
@@ -240,16 +240,6 @@ function boomSound(){
  if(!soundPrefs.enabled||!fireworkBuffer||!audioCtx||audioCtx.state!=='running')return;
  const source=trackSound(audioCtx.createBufferSource());source.buffer=fireworkBuffer;source.connect(masterGain);source.start(0,BURST_AUDIO_OFFSET);
 }
-// A synthesized rushing sound for 群声, separate from the uploaded launch recording.
-function groupRoarSound(){
- if(!soundPrefs.enabled||!audioCtx||audioCtx.state!=='running')return;
- const now=audioCtx.currentTime,duration=2.2,buffer=audioCtx.createBuffer(1,Math.ceil(audioCtx.sampleRate*duration),audioCtx.sampleRate),data=buffer.getChannelData(0);
- let smooth=0;for(let i=0;i<data.length;i++){const white=Math.random()*2-1;smooth=.97*smooth+.03*white;data[i]=white*.38+smooth*2.6}
- const source=trackSound(audioCtx.createBufferSource()),filter=audioCtx.createBiquadFilter(),gain=audioCtx.createGain();source.buffer=buffer;
- filter.type='lowpass';filter.frequency.setValueAtTime(1100,now);filter.frequency.linearRampToValueAtTime(2300,now+.45);filter.frequency.linearRampToValueAtTime(550,now+duration);
- gain.gain.setValueAtTime(0,now);gain.gain.linearRampToValueAtTime(.46,now+.20);gain.gain.linearRampToValueAtTime(.28,now+.85);gain.gain.linearRampToValueAtTime(.12,now+1.5);gain.gain.linearRampToValueAtTime(0,now+duration);
- source.connect(filter);filter.connect(gain);gain.connect(masterGain);source.start();source.stop(now+duration);
-}
 $('settings').onclick=()=>$('soundDialog').showModal();$('closeSound').onclick=()=>$('soundDialog').close();
 $('soundEnabled').onchange=()=>{soundPrefs.enabled=$('soundEnabled').checked;if(!soundPrefs.enabled){++audioRun;stopSounds()}else{const ready=ensureAudio();if(ready)ready.catch(()=>{})}updateSound()};
 $('soundVolume').oninput=()=>{soundPrefs.volume=Number($('soundVolume').value)/100;updateSound()};
@@ -258,7 +248,7 @@ updateSound();
 
 function launch(){const request=++launchRequest;stopSounds();const ready=soundPrefs.enabled?ensureAudio():null;const begin=()=>{if(request===launchRequest)beginLaunch()};if(ready)ready.then(begin).catch(()=>{$('soundNote').textContent='音源を読み込めませんでした。再読み込みしてお試しください。';begin()});else begin()}
 function clearSky(){ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";ctx.clearRect(0,0,W,H)}
-function beginLaunch(){prepareAscentPattern();groupRoarPlayed=false;clearSky();kikuAfterglowCtx.clearRect(0,0,W,H);kikuSmokeCtx.clearRect(0,0,W,H);if(!current&&!generate(false))return;resetPeakPhoto();peakName=current.name;$('snapshot').disabled=false;t=0;particles=[];trails=[];flashes=[];bloomFlashes=[];active=true;burstDone=false;paused=false;$('status').textContent='ASCENT — 打ち上げ中';lastTime=performance.now();launchSound()}
+function beginLaunch(){prepareAscentPattern();clearSky();kikuAfterglowCtx.clearRect(0,0,W,H);kikuSmokeCtx.clearRect(0,0,W,H);if(!current&&!generate(false))return;resetPeakPhoto();peakName=current.name;$('snapshot').disabled=false;t=0;particles=[];trails=[];flashes=[];bloomFlashes=[];active=true;burstDone=false;paused=false;$('status').textContent='ASCENT — 打ち上げ中';lastTime=performance.now();launchSound()}
 function burst(x,y){const mainStart=particles.length;const v=current, sh=v.shape, clr=cColor(v.baseColor), seq=v.sequence.map(cColor), end=v.ending;
 const flicker=end==='点滅'; // 先点滅は末端のみ点滅（下の p.ending 判定）
 // 開花直後の一瞬の閃光。星の種類を変えずに「玉が割れた」瞬間を強調する。
@@ -883,13 +873,6 @@ function drawAscentEffects(x,targetY,as,time,dt){
      drawBurstFan(x+2,ey,color,age,{baseAngle:-.58,spread:.90,length:22+idx*4,count:6,width:1});
    });
  }
- if(as.includes('笛')){
-   for(let r=0;r<2;r++){
-     const radius=7+((time*84+r*8)%18);
-     ctx.save();ctx.globalAlpha=.09;ctx.strokeStyle='#dcecff';ctx.lineWidth=1;
-     ctx.beginPath();ctx.arc(x,yy,radius,0,Math.PI*2);ctx.stroke();ctx.restore();
-   }
- }
  if(as.includes('点滅'))drawGlowDot(x,yy,color,3.1,.30*Math.max(0,Math.sin(time*24)));
 }
 function render(now){let dt=Math.min((now-lastTime)/1000,.045)*(Number($('speed').value)/100);lastTime=now;ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';if(active&&current.originalType!=='糸柳'&&!['kiku','botan','heart','saturn','fly','cluster','senrin','palm','crown'].includes(current.shape)){ctx.globalCompositeOperation='destination-out';ctx.fillStyle='rgba(0,0,0,.10)';ctx.fillRect(0,0,W,H);ctx.globalCompositeOperation='source-over'}else{clearSky()}ctx.globalAlpha=1;
@@ -932,7 +915,7 @@ if(active&&current?.shape==='kiku'){
  ctx.drawImage(kikuSmokeCanvas,0,0,kikuSmokeCanvas.width,kikuSmokeCanvas.height,0,0,W,H);
  ctx.restore();
 }
-if(active){t+=dt;updateWhistle();if(current.ending==='群声'&&!groupRoarPlayed&&t>=BURST_AUDIO_OFFSET+2.6){groupRoarPlayed=true;groupRoarSound()}const x=W*.5,y=H*.42;
+if(active){t+=dt;updateWhistle();const x=W*.5,y=H*.42;
  if(t<BURST_AUDIO_OFFSET){
   drawAscentEffects(x,y,current.ascent,t,dt);
  }else if(!burstDone){burstDone=true;boomSound();burst(x,y)}
