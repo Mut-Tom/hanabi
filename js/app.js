@@ -6,6 +6,7 @@ function colorOptionLabel(i,name){if(i===0){const m=name.match(/^昇([紅緑青�
 KEYS.forEach((k,i)=>{const field=document.createElement('div');field.className='field';const label=document.createElement('label');label.textContent='0'+(i+1)+' '+k+(i===0?'（上昇中の演出）':i===1?'（花火の内側の輪）':'');label.htmlFor=IDs[i];const select=document.createElement('select');select.id=IDs[i];select.setAttribute('aria-label',k);const option=document.createElement('option');option.value='';option.textContent='ランダム';select.appendChild(option);const noneOption=document.createElement('option');noneOption.value='なし';noneOption.textContent='なし';select.appendChild(noneOption);uniqueNames(i).filter(v=>v.name!=='なし').forEach(v=>{const o=document.createElement('option');o.value=v.name;o.textContent=colorOptionLabel(i,v.name);select.appendChild(o)});select.value='なし';select.addEventListener('change',()=>{
  if(i===0)autoAscent=select.value==='';
  if(i===5){autoColors=select.value==='';userColorPicked=select.value!=='';}
+ if(i===3)updateBaseChoices();
  // 変化・染分で色を指定しない場合は、ランダムを維持して毎回2色を抽選。
  if(i===4&&['変化','染分'].includes(select.value)&&!userColorPicked){
    fields.colors.value='';autoColors=true;
@@ -14,15 +15,34 @@ KEYS.forEach((k,i)=>{const field=document.createElement('div');field.className='
 });field.append(label,select);$('fields').appendChild(field);fields[IDs[i]]=select;});
 function has(s,n){return s.includes(n)}
 function colorSequence(str){return [...str].filter(ch=>COLORS[ch])}
-function role(n){if(n.includes('千輪'))return 'senrin';if(n.includes('冠'))return 'crown';if(n.includes('牡丹'))return 'botan';if(n.includes('菊'))return 'kiku';if(n.includes('柳'))return 'willow';if(n.includes('椰子'))return 'palm';if(n.includes('蜂')&&!n.includes('飛'))return 'bee';if(n.includes('飛遊星'))return 'fly';if(n.includes('花雷'))return 'thunder';if(n.includes('万華鏡'))return 'cluster';if(n.includes('ダリヤ'))return 'botan';if(n.includes('ハート'))return 'heart';if(n.includes('蝶'))return 'butterfly';if(n.includes('土星'))return 'saturn';return 'kiku'}
+function role(n){if(n.includes('千輪'))return 'senrin';if(n.includes('冠'))return 'crown';if(n.includes('牡丹'))return 'botan';if(n.includes('菊'))return 'kiku';if(n.includes('柳'))return 'willow';if(n.includes('椰子'))return 'palm';if(n.includes('蜂')&&!n.includes('飛'))return 'bee';if(n.includes('飛遊星'))return 'fly';if(n.includes('花雷'))return 'thunder';if(n.includes('万華鏡'))return 'cluster';if(n.includes('ハート'))return 'heart';if(n.includes('土星'))return 'saturn';return 'kiku'}
 function basicColor(n){if(n==='なし')return '炭';if(n==='錦')return '錦';return COLORS[n]?n:'炭'}
+// 菊の③は引き色。色付きの星先は⑥で選ぶ。
+function isOrdinaryKiku(name){return name==='菊'}
+function updateBaseChoices(){
+ const kiku=isOrdinaryKiku(fields.type.value);
+ const base=fields.base;
+ for(const opt of base.options){
+   if(opt.value==='')continue; // ランダムは有効な候補から抽選する
+   opt.hidden=kiku&&!['銀','錦'].includes(opt.value);
+   opt.disabled=opt.hidden;
+ }
+ if(kiku&&base.value!==''&&!['銀','錦'].includes(base.value))base.value='銀';
+ $('ruleNote').textContent=kiku?'菊：③は引き（尾）の色〈銀・錦〉、⑥は先端の星の色です。':'';
+}
 const none=()=>({name:'なし',desc:'',note:''});
 function randomEntry(i,override){return override?TABLES[i].find(x=>x.name===override)||none():pick(TABLES[i])}
 function resolve(input){
  let [a,b,c,d,e,f,g]=input.map(x=>({...x}));const notices=[];
  const sh=role(d.name),type=d.name;
+ if(isOrdinaryKiku(type)){
+   // ③は銀・錦だけ。未指定は銀引きを標準とする。
+   if(!['銀','錦'].includes(c.name))c={...(TABLES[2].find(o=>o.name==='銀'))};
+   // 菊の星先の発色は必ず⑥に持たせ、⑤なしなら「先」にする。
+   if(e.name==='なし')e={...(TABLES[4].find(o=>o.name==='先'))};
+ }
  const senrin=sh==='senrin',crown=sh==='crown',willow=sh==='willow',cluster=sh==='cluster';
- const special=['palm','bee','fly','thunder','heart','butterfly','saturn'].includes(sh);
+ const special=['palm','bee','fly','thunder','heart','saturn'].includes(sh);
  const hasCore=!special&&!willow&&!cluster;
  if(!hasCore||senrin&& !['なし','芯入'].includes(b.name)){
    if(b.name!=='なし')notices.push('② この玉種では芯部を無効');b=none();
@@ -35,14 +55,14 @@ function resolve(input){
  if(e.name==='染分'&&!['kiku','botan'].includes(sh)||!allowedMode.includes(e.name)){
    if(e.name!=='なし')notices.push('⑤ この玉種に変化を適用しません');e=none();
  }
- if(e.name==='変化'&&!['kiku','botan'].includes(sh)){e=none();notices.push('⑤ 変化は菊・牡丹・ダリヤ限定')}
+ if(e.name==='変化'&&!['kiku','botan'].includes(sh)){e=none();notices.push('⑤ 変化は菊・牡丹限定')}
  if(e.name==='染分'&&!['kiku','botan'].includes(sh)){e=none()}
  const validColors=TABLES[5].filter(o=>{
    const s=colorSequence(o.name);
    // ③基本色と⑥の全色（単色・2色の両方）を重複させない。
    // 「なし」は比較対象外。
    const baseColor=c.name;
-   if(COLORS[baseColor]&&s.includes(baseColor))return false;
+   if(sh!=='kiku'&&COLORS[baseColor]&&s.includes(baseColor))return false;
    if(e.name==='先')return (s.length>=1&&s.length<=2)||(o.name==='なし'&&g.name==='点滅');
    if(e.name==='染分')return s.length===2&&s[0]!==s[1];
    if(e.name==='変化')return s.length===2&&s[0]!==s[1];
@@ -88,10 +108,10 @@ function describeFirework(v){
  const parts=[];
  if(ascent.name!=='なし')parts.push(sentence(ascent.desc.split('。')[0]));
  let bloom=type.desc;
- if(type.name.includes('ダリヤ'))bloom=bloom.replace('星が大粒の光点が','大粒の光点が');
  if(type.name.includes('椰子'))bloom=bloom.replace('星が太い光の筋が','星が太い光の筋となり、');
  if(v.mode==='染分'&&type.name.includes('牡丹'))bloom='光点が尾を引かず、球形に広がる。';
  parts.push(sentence(bloom));
+ if(v.originalType==='菊')parts.push(`引き（尾）は${v.baseName==='錦'?'錦色':'銀色'}。星先の色は⑥で指定する。`);
  if(core.name!=='なし'){
  const peonyCore={彩色芯:'中心部にも本体と同じ色の牡丹星が広がる。',キラ芯:'芯部が本体と同じ色の細かな粒を散らしてきらめく。',輝光緑芯:'中心の芯が本体と同じ色で強く輝く。',紅輝光芯:'中心の芯が本体と同じ色で強く輝く。'};
  parts.push(sentence(v.shape==='senrin'?'それぞれの小花の内側に、一重の芯が開く。':type.name.includes('牡丹')&&peonyCore[core.name]?peonyCore[core.name]:core.name==='五重芯'?'親星の内側に五重の芯が開き、多重芯の構造を描く。':core.desc));
@@ -118,11 +138,14 @@ function renderFireworkData(v){current=v;const reading=hanabiReading(v.name);$('
 function generate(doPlay=false,randomize=false){
  if(randomize){autoAscent=false;autoColors=false;userColorPicked=false;}
  if(!randomize&&fields.type.value==='なし'){clearCurrentFirework();return null}
+ updateBaseChoices();
  const raw=KEYS.map((_,i)=>{
   const selected=randomize?'':fields[IDs[i]].value;
   if(i===0&&autoAscent&&!randomize)return {...pick(TABLES[0].filter(o=>o.name!=='なし'))};
+  if(i===2&&(randomize||!selected)&&isOrdinaryKiku(randomize?'':fields.type.value)){return {...pick(TABLES[2].filter(o=>['銀','錦'].includes(o.name)))};}
   return i===5?((autoColors&&!randomize)||!selected?{name:'ランダム',random:true}:randomEntry(i,selected)):randomEntry(i,selected);
  });
+ if(randomize&&raw[3].name==='菊')raw[2]={...pick(TABLES[2].filter(o=>['銀','錦'].includes(o.name)))};
  const v=resolve(raw);
  // すべてのプルダウンを実際に選ばれた構成に同期する。
  // 無効化された項目は「なし」に揃え、無効な組み合わせの再抽選結果も反映する。
@@ -131,6 +154,7 @@ function generate(doPlay=false,randomize=false){
    if(!randomize&&((i===0&&autoAscent)||(i===5&&autoColors)))select.value='';
    else if([...select.options].some(o=>o.value===e.name))select.value=e.name;
  });
+ updateBaseChoices();
  renderFireworkData(v);
  if(doPlay)launch();
  return v;
@@ -141,12 +165,13 @@ function clearCurrentFirework(){
  for(const id of ['notice','ruleNote','breakdown'])$(id).textContent='';
  $('status').textContent='READY — 夜空の準備ができました';updateShareButtons();
 }
-function reset(){autoAscent=false;autoColors=false;userColorPicked=false;Object.values(fields).forEach(select=>select.value='なし');$('manual').value='';clearCurrentFirework()}
+function reset(){autoAscent=false;autoColors=false;userColorPicked=false;Object.values(fields).forEach(select=>select.value='なし');updateBaseChoices();$('manual').value='';clearCurrentFirework()}
 
 function interpret(doPlay=true){
  autoAscent=false;autoColors=false;userColorPicked=false;
- const input=$('manual').value.trim().replace(/\s+/g,'');
+ const input=$('manual').value.trim().replace(/\s+/g,'').replace(/ダリヤ/g,'牡丹');
  if(!input){$('notice').textContent='玉名を入力してください';return}
+ if(input.includes('蝶')){$('notice').textContent='蝶型花火は現在取り扱っていません。別の玉名を指定してください。';return}
  const notes=[];const names=i=>uniqueNames(i).filter(o=>o.name!=='なし').sort((a,b)=>b.name.length-a.name.length);
  const entry=(i,n)=>uniqueNames(i).find(o=>o.name===n)||none();let rest=input;
  // 「昇り曲導付き」など、種類を指定しない総称は①の実在する付加演出を抽選する。
@@ -162,9 +187,19 @@ function interpret(doPlay=true){
    if(ascent)rest=rest.slice(ascent.name.length);
  }
  const core=names(1).find(o=>rest.startsWith(o.name));if(core)rest=rest.slice(core.name.length);
- const tipBlink=rest.endsWith('先点滅');if(tipBlink)rest=rest.slice(0,-4);
+ const tipBlink=rest.endsWith('先点滅');if(tipBlink)rest=rest.slice(0,-'先点滅'.length);
  let ending=tipBlink?entry(6,'点滅'):names(6).find(o=>rest.endsWith(o.name));
  if(ending&&!tipBlink)rest=rest.slice(0,-ending.name.length);
+ // resolve() は通常の点滅・千輪菊の点滅を玉種の直前に置く。
+ // その「表示済みの正式玉名」も、末尾の消え際と同様に読み取る。
+ // 『点滅芯』など芯部の語はここには該当させない。
+ if(!ending){
+   const blinkType=names(3).find(o=>rest.endsWith('点滅'+o.name));
+   if(blinkType){
+     rest=rest.slice(0,-('点滅'+blinkType.name).length)+blinkType.name;
+     ending=entry(6,'点滅');
+   }
+ }
  let mode='なし',colors='なし';
  if(rest.includes('染分')){
     mode='染分';const m=rest.match(/([紅緑青黄紫銀金錦]{2})染分/);colors=m?m[1]:'ランダム';if(!m)autoColors=true;rest=rest.replace(/([紅緑青黄紫銀金錦]{2})染分/,'').replace('染分','');
@@ -188,7 +223,7 @@ function interpret(doPlay=true){
  if(mode==='変化'&&result.mode==='変化')notes.push('⑥ 変化する色：ランダム（2色から毎回抽選）');
  result.raw.forEach((item,i)=>{fields[IDs[i]].value=(i===0&&autoAscent)||(i===5&&autoColors)?'':item.name;if(!((i===0&&autoAscent)||(i===5&&autoColors))&&requested[i].name!==item.name)notes.push(`${i+1} ${requested[i].name} → ${item.name}（組合せ制限）`)});
  if(result.name!==input)notes.push('再現可能な玉名：'+result.name);
- renderFireworkData(result);$('notice').textContent=['玉名から構成を再現しました',...notes,...result.notices].join(' ／ ');
+ updateBaseChoices();renderFireworkData(result);$('notice').textContent=['玉名から構成を再現しました',...notes,...result.notices].join(' ／ ');
  if(doPlay)launch();
 }
 $('shufflePlay').onclick=()=>generate(true,true);$('reset').onclick=reset;$('play').onclick=()=>{if(generate(false))launch();else $('notice').textContent='④ 玉の種類を選択してください。'};$('interpret').onclick=interpret;$('manual').addEventListener('keydown',e=>{if(e.key==='Enter')interpret()});$('speed').oninput=e=>$('speedNum').textContent=(e.target.value/100).toFixed(1)+'×';
@@ -213,7 +248,7 @@ $('shareX').onclick=()=>{
 };
 function loadSharedFirework(){
  const params=new URLSearchParams(window.location.search);
- const config=IDs.map(id=>params.get(id));
+ const config=IDs.map((id,i)=>{const value=params.get(id);return i===3&&value==='ダリヤ'?'牡丹':value;});
  if(config.some(value=>value!==null)){
    const valid=config.every((name,i)=>name!==null&&(name==='なし'||uniqueNames(i).some(e=>e.name===name)));
    if(!valid){$('notice').textContent='共有URLの構成を読み込めませんでした。';return}
@@ -221,7 +256,7 @@ function loadSharedFirework(){
    if(config[3]==='なし'){clearCurrentFirework();return}
    const raw=config.map((name,i)=>uniqueNames(i).find(e=>e.name===name)||{name:'なし'});
    const v=resolve(raw);v.raw.forEach((entry,i)=>{fields[IDs[i]].value=[...fields[IDs[i]].options].some(o=>o.value===entry.name)?entry.name:''});
-   renderFireworkData(v);return;
+   updateBaseChoices();renderFireworkData(v);return;
  }
  const name=params.get('name');
  if(name&&name.trim()){$('manual').value=name.trim().slice(0,200);interpret(false)}
