@@ -24,11 +24,11 @@ function updateBaseChoices(){
  const base=fields.base;
  for(const opt of base.options){
    if(opt.value==='')continue; // ランダムは有効な候補から抽選する
-   opt.hidden=kiku&&!['銀','錦'].includes(opt.value);
+   opt.hidden=kiku&&!['なし','銀','錦'].includes(opt.value);
    opt.disabled=opt.hidden;
  }
- if(kiku&&base.value!==''&&!['銀','錦'].includes(base.value))base.value='銀';
- $('ruleNote').textContent=kiku?'菊：③は引き（尾）の色〈銀・錦〉、⑥は先端の星の色です。':'';
+ if(kiku&&base.value!==''&&!['なし','銀','錦'].includes(base.value))base.value='なし';
+ $('ruleNote').textContent=kiku?'菊：③は引き（尾）の色〈なし・銀・錦〉。なしの場合は銀引き、⑥は先端の星の色です。':'';
 }
 const none=()=>({name:'なし',desc:'',note:''});
 function randomEntry(i,override){return override?TABLES[i].find(x=>x.name===override)||none():pick(TABLES[i])}
@@ -36,8 +36,8 @@ function resolve(input){
  let [a,b,c,d,e,f,g]=input.map(x=>({...x}));const notices=[];
  const sh=role(d.name),type=d.name;
  if(isOrdinaryKiku(type)){
-   // ③は銀・錦だけ。未指定は銀引きを標準とする。
-   if(!['銀','錦'].includes(c.name))c={...(TABLES[2].find(o=>o.name==='銀'))};
+   // ③は「なし」をデフォルトとして維持。未指定の表示名は「菊」、引きは銀色で描く。
+   if(!['なし','銀','錦'].includes(c.name))c=none();
    // 菊の星先の発色は必ず⑥に持たせ、⑤なしなら「先」にする。
    if(e.name==='なし')e={...(TABLES[4].find(o=>o.name==='先'))};
  }
@@ -47,7 +47,9 @@ function resolve(input){
  if(!hasCore||senrin&& !['なし','芯入'].includes(b.name)){
    if(b.name!=='なし')notices.push('② この玉種では芯部を無効');b=none();
  }
- if(senrin||cluster){c=none();}
+ if(cluster){c=none();}
+ // 千輪菊は③の単色を有効にする。未指定なら従来の色設定を保つ。
+ if(senrin&&!['なし','紅','緑','青','黄','紫','銀','金','錦'].includes(c.name))c=none();
 
  if(special||willow){if(!['なし','紅','緑','青','黄','紫','銀','錦'].includes(c.name))c=none()}
  if(crown&&!['なし','紅','緑','青','黄','紫','銀','錦'].includes(c.name))c=none();
@@ -98,7 +100,7 @@ function resolve(input){
    }else if(g.name!=='なし')body+=g.name;
  }
  const name=(a.name==='なし'?'':a.name)+(b.name==='なし'?'':b.name)+body;
- return {name,raw:[a,b,c,d,e,f,g],shape:sh,baseColor:basicColor(c.name),baseName:c.name,sequence:e.name==='なし'?[]:colorSequence(f.name),mode:e.name,ending:tipBlink?'先点滅':g.name,core:b.name==='なし'?'':b.name,ascent:a.name==='なし'?'':a.name,notices,originalType:type};
+ return {name,raw:[a,b,c,d,e,f,g],shape:sh,baseColor:sh==='kiku'&&c.name==='なし'?'銀':basicColor(c.name),baseName:c.name,sequence:e.name==='なし'?[]:colorSequence(f.name),mode:e.name,ending:tipBlink?'先点滅':g.name,core:b.name==='なし'?'':b.name,ascent:a.name==='なし'?'':a.name,notices,originalType:type};
 }
 function describeFirework(v){
  const [ascent,core,base,type,,,ending]=v.raw;
@@ -111,7 +113,8 @@ function describeFirework(v){
  if(type.name.includes('椰子'))bloom=bloom.replace('星が太い光の筋が','星が太い光の筋となり、');
  if(v.mode==='染分'&&type.name.includes('牡丹'))bloom='光点が尾を引かず、球形に広がる。';
  parts.push(sentence(bloom));
- if(v.originalType==='菊')parts.push(`引き（尾）は${v.baseName==='錦'?'錦色':'銀色'}。星先の色は⑥で指定する。`);
+ if(v.originalType==='菊')parts.push(`引き（尾）は${v.baseName==='錦'?'錦色':v.baseName==='銀'?'銀色':'未指定（標準の銀色）'}。星先の色は⑥で指定する。`);
+ if(v.shape==='senrin'&&v.baseName!=='なし')parts.push(`③で指定した${colors[v.baseName]||v.baseName}の小花が一斉に開く。`);
  if(core.name!=='なし'){
  const peonyCore={彩色芯:'中心部にも本体と同じ色の牡丹星が広がる。',キラ芯:'芯部が本体と同じ色の細かな粒を散らしてきらめく。',輝光緑芯:'中心の芯が本体と同じ色で強く輝く。',紅輝光芯:'中心の芯が本体と同じ色で強く輝く。'};
  parts.push(sentence(v.shape==='senrin'?'それぞれの小花の内側に、一重の芯が開く。':type.name.includes('牡丹')&&peonyCore[core.name]?peonyCore[core.name]:core.name==='五重芯'?'親星の内側に五重の芯が開き、多重芯の構造を描く。':core.desc));
@@ -142,7 +145,7 @@ function generate(doPlay=false,randomize=false){
  const raw=KEYS.map((_,i)=>{
   const selected=randomize?'':fields[IDs[i]].value;
   if(i===0&&autoAscent&&!randomize)return {...pick(TABLES[0].filter(o=>o.name!=='なし'))};
-  if(i===2&&(randomize||!selected)&&isOrdinaryKiku(randomize?'':fields.type.value)){return {...pick(TABLES[2].filter(o=>['銀','錦'].includes(o.name)))};}
+  if(i===2&&selected===''&&isOrdinaryKiku(fields.type.value)){return {...pick(TABLES[2].filter(o=>['銀','錦'].includes(o.name)))};}
   return i===5?((autoColors&&!randomize)||!selected?{name:'ランダム',random:true}:randomEntry(i,selected)):randomEntry(i,selected);
  });
  if(randomize&&raw[3].name==='菊')raw[2]={...pick(TABLES[2].filter(o=>['銀','錦'].includes(o.name)))};

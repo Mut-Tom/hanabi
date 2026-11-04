@@ -272,7 +272,7 @@ if(sh==='senrin'){
  const shells=21;
  for(let i=0;i<shells;i++){
    const depth=1-2*(i+.5)/shells,angle=i*2.3999632297,plane=Math.sqrt(1-depth*depth);
-   const speed=rand(165,185),color=v.originalType.includes('彩色')?cColor(pick(['紅','緑','青','黄','紫','銀'])):clr;
+   const speed=rand(165,185),color=v.baseName!=='なし'?clr:(v.originalType.includes('彩色')?cColor(pick(['紅','緑','青','黄','紫','銀'])):clr);
    particle(x,y,Math.cos(angle)*plane*speed,Math.sin(angle)*plane*speed,color,rand(.78,1.02),{kind:'senrin-shell',drag:.998,grav:5,trail:0,size:1,flicker:false});
    const shell=particles[particles.length-1];shell.depth=depth;shell.bloomFlicker=flicker;shell.hasCore=Boolean(v.core);
  }
