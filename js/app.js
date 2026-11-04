@@ -6,7 +6,7 @@ function colorOptionLabel(i,name){if(i===0){const m=name.match(/^昇([紅緑青�
 KEYS.forEach((k,i)=>{const field=document.createElement('div');field.className='field';const label=document.createElement('label');label.textContent='0'+(i+1)+' '+k+(i===0?'（上昇中の演出）':i===1?'（花火の内側の輪）':'');label.htmlFor=IDs[i];const select=document.createElement('select');select.id=IDs[i];select.setAttribute('aria-label',k);const option=document.createElement('option');option.value='';option.textContent='ランダム';select.appendChild(option);const noneOption=document.createElement('option');noneOption.value='なし';noneOption.textContent='なし';select.appendChild(noneOption);uniqueNames(i).filter(v=>v.name!=='なし').forEach(v=>{const o=document.createElement('option');o.value=v.name;o.textContent=colorOptionLabel(i,v.name);select.appendChild(o)});select.value='なし';select.addEventListener('change',()=>{
  if(i===0)autoAscent=select.value==='';
  if(i===5){autoColors=select.value==='';userColorPicked=select.value!=='';}
- if(i===3)updateBaseChoices();
+ if(i===3){updateBaseChoices();if(isOrdinaryKiku(select.value))fields.base.value='なし';}
  // 変化・染分で色を指定しない場合は、ランダムを維持して毎回2色を抽選。
  if(i===4&&['変化','染分'].includes(select.value)&&!userColorPicked){
    fields.colors.value='';autoColors=true;
@@ -22,12 +22,19 @@ function isOrdinaryKiku(name){return name==='菊'}
 function updateBaseChoices(){
  const kiku=isOrdinaryKiku(fields.type.value);
  const base=fields.base;
- for(const opt of base.options){
-   if(opt.value==='')continue; // ランダムは有効な候補から抽選する
-   opt.hidden=kiku&&!['なし','銀','錦'].includes(opt.value);
-   opt.disabled=opt.hidden;
+ const allowed=kiku?['','なし','銀','錦']:['','なし',...uniqueNames(2).filter(v=>v.name!=='なし').map(v=>v.name)];
+ const previous=base.value;
+ // option.hidden はプルダウン上の表示がブラウザごとに不安定になるため、
+ // ③の候補そのものを玉種ごとに再構成する。
+ if(base.options.length!==allowed.length||allowed.some((name,i)=>base.options[i]?.value!==name)){
+   base.replaceChildren(...allowed.map(name=>{
+     const opt=document.createElement('option');
+     opt.value=name;
+     opt.textContent=name===''?'ランダム':colorOptionLabel(2,name);
+     return opt;
+   }));
  }
- if(kiku&&base.value!==''&&!['なし','銀','錦'].includes(base.value))base.value='なし';
+ base.value=allowed.includes(previous)?previous:'なし';
  $('ruleNote').textContent=kiku?'菊：③は引き（尾）の色〈なし・銀・錦〉。なしの場合は銀引き、⑥は先端の星の色です。':'';
 }
 const none=()=>({name:'なし',desc:'',note:''});
